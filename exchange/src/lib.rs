@@ -222,6 +222,7 @@ impl SerTicker {
             Exchange::OkexLinear => "OkexLinear",
             Exchange::OkexInverse => "OkexInverse",
             Exchange::OkexSpot => "OkexSpot",
+            Exchange::MetaTrader5Spot => "MetaTrader5Spot",
         }
     }
 
@@ -238,6 +239,7 @@ impl SerTicker {
             "OkexLinear" => Ok(Exchange::OkexLinear),
             "OkexInverse" => Ok(Exchange::OkexInverse),
             "OkexSpot" => Ok(Exchange::OkexSpot),
+            "MetaTrader5Spot" => Ok(Exchange::MetaTrader5Spot),
             _ => Err(format!("Unknown exchange: {}", s)),
         }
     }

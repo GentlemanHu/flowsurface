@@ -12,6 +12,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 pub mod binance;
 pub mod bybit;
 pub mod hyperliquid;
+pub mod metatrader5;
 pub mod okex;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -423,14 +424,16 @@ pub enum ExchangeInclusive {
     Binance,
     Hyperliquid,
     Okex,
+    MetaTrader5,
 }
 
 impl ExchangeInclusive {
-    pub const ALL: [ExchangeInclusive; 4] = [
+    pub const ALL: [ExchangeInclusive; 5] = [
         ExchangeInclusive::Bybit,
         ExchangeInclusive::Binance,
         ExchangeInclusive::Hyperliquid,
         ExchangeInclusive::Okex,
+        ExchangeInclusive::MetaTrader5,
     ];
 
     pub fn of(ex: Exchange) -> Self {
@@ -441,6 +444,7 @@ impl ExchangeInclusive {
             }
             Exchange::HyperliquidLinear | Exchange::HyperliquidSpot => Self::Hyperliquid,
             Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => Self::Okex,
+            Exchange::MetaTrader5Spot => Self::MetaTrader5,
         }
     }
 }
@@ -458,6 +462,7 @@ pub enum Exchange {
     OkexLinear,
     OkexInverse,
     OkexSpot,
+    MetaTrader5Spot,
 }
 
 impl std::fmt::Display for Exchange {
@@ -477,6 +482,7 @@ impl std::fmt::Display for Exchange {
                 Exchange::OkexLinear => "Okex Linear",
                 Exchange::OkexInverse => "Okex Inverse",
                 Exchange::OkexSpot => "Okex Spot",
+                Exchange::MetaTrader5Spot => "MetaTrader5 Spot",
             }
         )
     }
@@ -498,13 +504,14 @@ impl FromStr for Exchange {
             "Okex Linear" => Ok(Exchange::OkexLinear),
             "Okex Inverse" => Ok(Exchange::OkexInverse),
             "Okex Spot" => Ok(Exchange::OkexSpot),
+            "MetaTrader5 Spot" => Ok(Exchange::MetaTrader5Spot),
             _ => Err(format!("Invalid exchange: {}", s)),
         }
     }
 }
 
 impl Exchange {
-    pub const ALL: [Exchange; 11] = [
+    pub const ALL: [Exchange; 12] = [
         Exchange::BinanceLinear,
         Exchange::BinanceInverse,
         Exchange::BinanceSpot,
@@ -516,6 +523,7 @@ impl Exchange {
         Exchange::OkexLinear,
         Exchange::OkexInverse,
         Exchange::OkexSpot,
+        Exchange::MetaTrader5Spot,
     ];
 
     pub fn market_type(&self) -> MarketKind {
@@ -530,7 +538,8 @@ impl Exchange {
             Exchange::BinanceSpot
             | Exchange::BybitSpot
             | Exchange::HyperliquidSpot
-            | Exchange::OkexSpot => MarketKind::Spot,
+            | Exchange::OkexSpot
+            | Exchange::MetaTrader5Spot => MarketKind::Spot,
         }
     }
 
@@ -650,6 +659,7 @@ pub async fn fetch_ticker_info(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_ticksize(market_type).await
         }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_ticksize(market_type).await,
     }
 }
 
@@ -671,6 +681,7 @@ pub async fn fetch_ticker_prices(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_ticker_prices(market_type).await
         }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_ticker_prices(market_type).await,
     }
 }
 
@@ -692,6 +703,7 @@ pub async fn fetch_klines(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_klines(ticker_info, timeframe, range).await
         }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_klines(ticker_info, timeframe, range).await,
     }
 }
 
