@@ -62,5 +62,8 @@ rodio = { version = "0.20.1", default-features = false, features = [ "wav" ]}
 exchange = { version = "0.1.0", path = "exchange", package = "flowsurface-exchange" }
 data = { version = "0.1.0", path = "data", package = "flowsurface-data" }
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
 [features]
 debug = ["iced/hot"]
