@@ -32,6 +32,9 @@ use iced::{
 use std::{borrow::Cow, collections::HashMap, vec};
 
 #[cfg(all(target_os = "windows", not(debug_assertions)))]
+const CRASH_LOG_FILE: &str = "crash.log";
+
+#[cfg(all(target_os = "windows", not(debug_assertions)))]
 fn show_error_message(title: &str, message: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -54,18 +57,29 @@ fn main() {
     // Set up panic handler for Windows release builds to show errors
     #[cfg(all(target_os = "windows", not(debug_assertions)))]
     std::panic::set_hook(Box::new(|panic_info| {
+        let location_str = panic_info.location()
+            .map(|l| l.to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        
         let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-            format!("Application panicked: {}\n\nLocation: {}", s, panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+            format!("Application panicked: {}\n\nLocation: {}", s, location_str)
         } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
-            format!("Application panicked: {}\n\nLocation: {}", s, panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+            format!("Application panicked: {}\n\nLocation: {}", s, location_str)
         } else {
-            format!("Application panicked with unknown payload\n\nLocation: {}", panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+            format!("Application panicked with unknown payload\n\nLocation: {}", location_str)
         };
         show_error_message("Flowsurface Error", &message);
         
-        // Also write to a log file
-        let log_path = data::data_path(Some("crash.log"));
-        let _ = std::fs::write(&log_path, format!("{}\n{}", chrono::Utc::now(), message));
+        // Write to crash log file
+        let log_path = data::data_path(Some(CRASH_LOG_FILE));
+        if let Some(parent) = log_path.parent() {
+            if !parent.exists() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+        }
+        if let Err(e) = std::fs::write(&log_path, format!("{}\n{}", chrono::Utc::now(), message)) {
+            eprintln!("Failed to write crash log to {:?}: {}", log_path, e);
+        }
     }));
 
     if let Err(e) = logger::setup(cfg!(debug_assertions)) {
