@@ -161,8 +161,8 @@ void CheckForClientConnection()
         return;
     }
     
-    // Try to accept a client connection (blocking call)
-    // Note: SocketAccept() is blocking but we call it periodically from OnTimer
+    // Try to accept a client connection (non-blocking)
+    // Returns INVALID_HANDLE if no client is waiting to connect
     int newClientSocket = SocketAccept(serverSocket);
     
     if(newClientSocket != INVALID_HANDLE)
