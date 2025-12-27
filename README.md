@@ -6,7 +6,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/flowsurface-rs/flowsurface/blob/main/LICENSE)
 [![Made with iced](https://iced.rs/badge.svg)](https://github.com/iced-rs/iced)
 
-An experimental open-source desktop charting application. Supports Binance, Bybit, Hyperliquid and OKX
+An experimental open-source desktop charting application. Supports Binance, Bybit, Hyperliquid, OKX, and **MetaTrader 5**
 
 <div align="center">
   <img
@@ -29,8 +29,11 @@ An experimental open-source desktop charting application. Supports Binance, Bybi
 -   Multi window/monitor support
 -   Pane linking for quickly switching tickers across multiple panes
 -   Persistent layouts and customizable themes with editable color palettes
+-   **MetaTrader 5 Integration**: Connect your MT5 terminal to view forex, metals (XAUUSD/XAGUSD), indices, and crypto markets with full footprint support
 
 ##### Market data is received directly from exchanges' public REST APIs and WebSockets
+
+For MetaTrader 5, market data is received via a local TCP connection from an MQL5 Expert Advisor. See [`mql5/README.md`](mql5/README.md) for setup instructions.
 
 #
 
