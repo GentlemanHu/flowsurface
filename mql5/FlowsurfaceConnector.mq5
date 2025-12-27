@@ -162,7 +162,8 @@ void CheckForClientConnection()
     }
     
     // Try to accept a client connection
-    // This is called periodically from OnTimer
+    // Called periodically from OnTimer (every UpdateIntervalMs, default 100ms)
+    // This is simple and efficient for the single-client use case
     int newClientSocket = SocketAccept(serverSocket);
     
     if(newClientSocket != INVALID_HANDLE)
