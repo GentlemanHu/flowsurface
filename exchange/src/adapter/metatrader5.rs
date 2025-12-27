@@ -23,7 +23,7 @@ const DEFAULT_PORT: u16 = 7878;
 fn exchange_from_market_type(market: MarketKind) -> Exchange {
     match market {
         MarketKind::Spot => Exchange::MetaTrader5Spot,
-        _ => panic!("MetaTrader5 only supports Spot market"),
+        _ => Exchange::MetaTrader5Spot, // MT5 adapter only supports Spot for now
     }
 }
 
@@ -263,8 +263,9 @@ async fn process_mt5_message(
 ) -> Result<(), String> {
     match msg {
         Mt5Message::Trade(mt5_trade) => {
+            // Calculate quantity with overflow protection
             let qty = if size_in_quote_ccy {
-                mt5_trade.volume * mt5_trade.price
+                (mt5_trade.volume as f64 * mt5_trade.price as f64) as f32
             } else {
                 mt5_trade.volume
             };

@@ -1414,10 +1414,8 @@ pub fn kline_subscription(
         Exchange::MetaTrader5Spot => {
             let builder = |_cfg: &StreamConfig<Vec<(TickerInfo, Timeframe)>>| {
                 // For MT5, klines are received through the market stream
-                // Return an empty stream that just connects
-                stream::unfold(Exchange::MetaTrader5Spot, |ex| async move {
-                    Some((exchange::Event::Connected(ex), ex))
-                })
+                // Return a pending stream that never yields
+                stream::pending()
             };
             Subscription::run_with(config, builder)
         }
