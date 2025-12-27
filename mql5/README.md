@@ -2,18 +2,6 @@
 
 This directory contains the MQL5 Expert Advisor (EA) that enables MetaTrader 5 to send market data to Flowsurface.
 
-## Architecture
-
-The MT5 integration uses a **client-server architecture**:
-
-- **Flowsurface** = TCP Server (listens on port 7878)
-- **MT5 Expert Advisor** = TCP Client (connects to Flowsurface)
-
-This design allows:
-- **Multiple symbols**: Run the EA on multiple MT5 charts simultaneously, each sending data for different symbols
-- **Cross-platform support**: MT5 (typically Windows) can connect to Flowsurface running on Windows, Mac, or Linux
-- **Network flexibility**: Connect locally (127.0.0.1) or over a network (configure IP address in EA settings)
-
 ## Overview
 
 The Flowsurface Connector EA establishes a TCP connection to the Flowsurface application and streams real-time market data including:
