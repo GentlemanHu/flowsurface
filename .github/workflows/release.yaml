@@ -19,6 +19,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Import GPG key and configure Git
+              if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
               env:
                   GPG_NAME: ${{ secrets.GPG_NAME }}
                   GPG_EMAIL: ${{ secrets.GPG_EMAIL }}
@@ -39,6 +40,7 @@ jobs:
                   git config gpg.program "$RUNNER_TEMP/gpg-wrapper.sh"
 
             - name: Create signed tag
+              if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
               env:
                   TAG: ${{ github.event.inputs.tag }}
                   GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -48,6 +50,20 @@ jobs:
                     exit 0
                   fi
                   git tag -s "$TAG" -m "Release $TAG" HEAD
+                  git push origin "refs/tags/$TAG"
+
+            - name: Create unsigned tag
+              if: ${{ secrets.GPG_PRIVATE_KEY == '' }}
+              env:
+                  TAG: ${{ github.event.inputs.tag }}
+              run: |
+                  if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+                    echo "Tag $TAG already exists, skipping."
+                    exit 0
+                  fi
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag -a "$TAG" -m "Release $TAG" HEAD
                   git push origin "refs/tags/$TAG"
 
     build:
@@ -287,12 +303,14 @@ jobs:
                   cat SHA256SUMS
 
             - name: Import GPG key
+              if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
               run: |
                   echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
                   echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
                   gpg-connect-agent reloadagent /bye
 
             - name: Sign checksums
+              if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
               env:
                   GPG_TTY: /dev/null
               run: |
@@ -313,6 +331,7 @@ jobs:
                   asset_content_type: text/plain
 
             - name: Upload signature as release asset
+              if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
               uses: actions/upload-release-asset@v1
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

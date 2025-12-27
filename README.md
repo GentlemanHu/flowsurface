@@ -33,7 +33,12 @@ An experimental open-source desktop charting application. Supports Binance, Bybi
 
 ##### Market data is received directly from exchanges' public REST APIs and WebSockets
 
-For MetaTrader 5, market data is received via a local TCP connection from an MQL5 Expert Advisor. See [`mql5/README.md`](mql5/README.md) for setup instructions.
+For MetaTrader 5, Flowsurface acts as a **TCP server** (listens on port 7878) and accepts connections from MT5 Expert Advisors running as clients. This architecture allows:
+- Multiple MT5 charts to connect simultaneously (one EA per chart/symbol)
+- Cross-platform connections (MT5 on Windows → Flowsurface on Mac/Linux/Windows)
+- Both local (127.0.0.1) and network connections
+
+See [`mql5/README.md`](mql5/README.md) for setup instructions and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed architecture information.
 
 #
 

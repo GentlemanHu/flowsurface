@@ -31,12 +31,59 @@ use iced::{
 };
 use std::{borrow::Cow, collections::HashMap, vec};
 
+#[cfg(all(target_os = "windows", not(debug_assertions)))]
+fn show_error_message(title: &str, message: &str) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::iter::once;
+    
+    let wide_title: Vec<u16> = OsStr::new(title).encode_wide().chain(once(0)).collect();
+    let wide_message: Vec<u16> = OsStr::new(message).encode_wide().chain(once(0)).collect();
+    
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            windows::Win32::Foundation::HWND(0),
+            windows::Win32::Foundation::PCWSTR(wide_message.as_ptr()),
+            windows::Win32::Foundation::PCWSTR(wide_title.as_ptr()),
+            windows::Win32::UI::WindowsAndMessaging::MB_OK | windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+        );
+    }
+}
+
 fn main() {
-    logger::setup(cfg!(debug_assertions)).expect("Failed to initialize logger");
+    // Set up panic handler for Windows release builds to show errors
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    std::panic::set_hook(Box::new(|panic_info| {
+        let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            format!("Application panicked: {}\n\nLocation: {}", s, panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            format!("Application panicked: {}\n\nLocation: {}", s, panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+        } else {
+            format!("Application panicked with unknown payload\n\nLocation: {}", panic_info.location().map(|l| l.to_string()).unwrap_or_else(|| "Unknown".to_string()))
+        };
+        show_error_message("Flowsurface Error", &message);
+        
+        // Also write to a log file
+        let log_path = data::data_path(Some("crash.log"));
+        let _ = std::fs::write(&log_path, format!("{}\n{}", chrono::Utc::now(), message));
+    }));
+
+    if let Err(e) = logger::setup(cfg!(debug_assertions)) {
+        #[cfg(all(target_os = "windows", not(debug_assertions)))]
+        {
+            show_error_message("Flowsurface - Logger Error", &format!("Failed to initialize logger: {}", e));
+            return;
+        }
+        #[cfg(not(all(target_os = "windows", not(debug_assertions))))]
+        {
+            eprintln!("Failed to initialize logger: {}", e);
+            return;
+        }
+    }
 
     std::thread::spawn(data::cleanup_old_market_data);
 
-    let _ = iced::daemon(Flowsurface::new, Flowsurface::update, Flowsurface::view)
+    if let Err(e) = iced::daemon(Flowsurface::new, Flowsurface::update, Flowsurface::view)
         .settings(iced::Settings {
             antialiasing: true,
             fonts: vec![
@@ -50,7 +97,16 @@ fn main() {
         .theme(Flowsurface::theme)
         .scale_factor(Flowsurface::scale_factor)
         .subscription(Flowsurface::subscription)
-        .run();
+        .run() {
+        #[cfg(all(target_os = "windows", not(debug_assertions)))]
+        {
+            show_error_message("Flowsurface - Runtime Error", &format!("Failed to run application: {}", e));
+        }
+        #[cfg(not(all(target_os = "windows", not(debug_assertions))))]
+        {
+            eprintln!("Failed to run application: {}", e);
+        }
+    }
 }
 
 struct Flowsurface {
