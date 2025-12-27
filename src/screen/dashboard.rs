@@ -21,7 +21,7 @@ use exchange::{
     Kline, PushFrequency, StreamPairKind, TickMultiplier, TickerInfo, Timeframe, Trade,
     adapter::{
         self, AdapterError, Exchange, PersistStreamKind, ResolvedStream, StreamConfig, StreamKind,
-        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, okex,
+        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, okex, metatrader5,
     },
     depth::Depth,
     fetcher::{FetchRange, FetchedData},
@@ -35,7 +35,7 @@ use iced::{
         pane_grid::{self, Configuration},
     },
 };
-use iced_futures::futures::TryFutureExt;
+use iced_futures::futures::{stream, TryFutureExt};
 use std::{collections::HashMap, path::PathBuf, time::Instant, vec};
 
 #[derive(Debug, Clone)]
@@ -1372,6 +1372,12 @@ pub fn depth_subscription(
                 |cfg: &StreamConfig<TickerInfo>| okex::connect_market_stream(cfg.id, cfg.push_freq);
             Subscription::run_with(config, builder)
         }
+        Exchange::MetaTrader5Spot => {
+            let builder = |cfg: &StreamConfig<TickerInfo>| {
+                metatrader5::connect_market_stream(cfg.id, cfg.push_freq)
+            };
+            Subscription::run_with(config, builder)
+        }
     }
 }
 
@@ -1402,6 +1408,16 @@ pub fn kline_subscription(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             let builder = |cfg: &StreamConfig<Vec<(TickerInfo, Timeframe)>>| {
                 okex::connect_kline_stream(cfg.id.clone(), cfg.market_type)
+            };
+            Subscription::run_with(config, builder)
+        }
+        Exchange::MetaTrader5Spot => {
+            let builder = |_cfg: &StreamConfig<Vec<(TickerInfo, Timeframe)>>| {
+                // For MT5, klines are received through the market stream
+                // Return an empty stream that just connects
+                stream::unfold(Exchange::MetaTrader5Spot, |ex| async move {
+                    Some((exchange::Event::Connected(ex), ex))
+                })
             };
             Subscription::run_with(config, builder)
         }
