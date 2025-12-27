@@ -41,7 +41,7 @@ If you encounter this issue:
 4. **Build from Source**:
    As a workaround, build the application locally:
    ```powershell
-   git clone https://github.com/flowsurface-rs/flowsurface
+   git clone https://github.com/<your-username>/flowsurface
    cd flowsurface
    cargo build --release
    cargo run --release
