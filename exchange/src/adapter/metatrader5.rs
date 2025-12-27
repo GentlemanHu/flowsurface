@@ -16,9 +16,34 @@ use iced_futures::{
 use serde::Deserialize;
 use std::{collections::HashMap, net::SocketAddr};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
 const DEFAULT_PORT: u16 = 7878;
+const DEFAULT_HOST: &str = "127.0.0.1";
+
+/// Parse MT5 connection string from ticker metadata
+/// Format: "SYMBOL@HOST:PORT" or "SYMBOL" (uses defaults)
+fn parse_mt5_connection(ticker: &Ticker) -> (String, String, u16) {
+    let (symbol_str, _) = ticker.to_full_symbol_and_type();
+    
+    // Check if symbol contains connection info
+    if let Some(at_pos) = symbol_str.find('@') {
+        let symbol = symbol_str[..at_pos].to_string();
+        let connection = &symbol_str[at_pos + 1..];
+        
+        if let Some(colon_pos) = connection.find(':') {
+            let host = connection[..colon_pos].to_string();
+            let port = connection[colon_pos + 1..]
+                .parse::<u16>()
+                .unwrap_or(DEFAULT_PORT);
+            (symbol, host, port)
+        } else {
+            (symbol, connection.to_string(), DEFAULT_PORT)
+        }
+    } else {
+        (symbol_str, DEFAULT_HOST.to_string(), DEFAULT_PORT)
+    }
+}
 
 fn exchange_from_market_type(market: MarketKind) -> Exchange {
     match market {
@@ -135,49 +160,30 @@ pub async fn fetch_klines(
 }
 
 /// Connect to MT5 market data stream
-/// This creates a TCP server that listens for connections from the MT5 EA
+/// This creates a TCP client that connects to the MT5 EA server
 pub fn connect_market_stream(
     ticker_info: TickerInfo,
     _push_freq: PushFrequency,
 ) -> impl Stream<Item = Event> {
     stream::channel(100, move |mut output: mpsc::Sender<Event>| async move {
         let ticker = ticker_info.ticker;
-        let (symbol_str, market) = ticker.to_full_symbol_and_type();
+        let (symbol_str, host, port) = parse_mt5_connection(&ticker);
+        let (_original_symbol, market) = ticker.to_full_symbol_and_type();
         let exchange = exchange_from_market_type(market);
 
         let mut orderbook: LocalDepthCache = LocalDepthCache::default();
         let mut trades_buffer: Vec<Trade> = Vec::new();
 
-        log::info!("Starting MT5 market stream for {}", symbol_str);
+        log::info!("Starting MT5 market stream for {} (connecting to {}:{})", symbol_str, host, port);
 
-        // Start TCP server to listen for MT5 EA connections
-        let addr = SocketAddr::from(([127, 0, 0, 1], DEFAULT_PORT));
-
-        let listener = match TcpListener::bind(&addr).await {
-            Ok(l) => {
-                log::info!("MT5 TCP server listening on {}", addr);
-                let _ = output.send(Event::Connected(exchange)).await;
-                l
-            }
-            Err(e) => {
-                log::error!("Failed to bind MT5 TCP server: {}", e);
-                let _ = output
-                    .send(Event::Disconnected(
-                        exchange,
-                        format!("Failed to bind TCP server: {}", e),
-                    ))
-                    .await;
-                return;
-            }
-        };
-
-        // Accept connections from MT5 EA
+        // Connect to MT5 EA server with retry logic
         loop {
-            match listener.accept().await {
-                Ok((stream, peer_addr)) => {
-                    log::info!("MT5 EA connected from {}", peer_addr);
+            match TcpStream::connect(format!("{}:{}", host, port)).await {
+                Ok(stream) => {
+                    log::info!("Connected to MT5 EA at {}:{}", host, port);
+                    let _ = output.send(Event::Connected(exchange)).await;
 
-                    // Handle this connection
+                    // Handle the connection
                     if let Err(e) = handle_mt5_connection(
                         stream,
                         ticker_info,
@@ -195,10 +201,22 @@ pub fn connect_market_stream(
                             ))
                             .await;
                     }
+
+                    // Connection lost, wait before reconnecting
+                    log::info!("Attempting to reconnect to MT5 EA in 5 seconds...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
                 Err(e) => {
-                    log::error!("Failed to accept MT5 connection: {}", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    log::error!("Failed to connect to MT5 EA at {}:{} - {}", host, port, e);
+                    let _ = output
+                        .send(Event::Disconnected(
+                            exchange,
+                            format!("Failed to connect: {}", e),
+                        ))
+                        .await;
+
+                    // Wait before retrying
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }
         }
