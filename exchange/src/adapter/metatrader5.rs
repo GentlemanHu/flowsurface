@@ -14,7 +14,7 @@ use iced_futures::{
     stream,
 };
 use serde::Deserialize;
-use std::{collections::HashMap, net::SocketAddr};
+use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 

@@ -88,19 +88,24 @@ The EA will start a TCP server and wait for Flowsurface to connect.
 
 ### Step 5: Configure Flowsurface to Connect
 
-When adding a MetaTrader 5 ticker in Flowsurface:
+When adding a MetaTrader 5 ticker in Flowsurface, use the following symbol format:
 
-1. Select **MetaTrader5** as the exchange
-2. Enter the symbol name (e.g., `XAUUSD`)
-3. Configure connection settings:
-   - **Host**: IP address of the machine running MT5
-     - Use `127.0.0.1` or `localhost` if MT5 is on the same machine
-     - Use the LAN IP (e.g., `192.168.1.100`) for local network connections
-     - Use the public IP or domain for remote/VPS connections
-   - **Port**: Must match the `ServerPort` in the EA (default: 7878)
-4. Click **Connect**
+**Symbol Format**: `SYMBOL@HOST:PORT` or just `SYMBOL` (uses defaults)
 
-Flowsurface will connect to the MT5 server and start receiving market data.
+**Examples**:
+- Local connection: `XAUUSD` (connects to 127.0.0.1:7878)
+- Local with explicit host: `XAUUSD@127.0.0.1:7878`
+- LAN connection: `XAUUSD@192.168.1.100:7878`
+- Remote/VPS connection: `XAUUSD@203.0.113.10:7878` or `XAUUSD@mt5.example.com:7878`
+- Custom port: `EURUSD@192.168.1.100:8888`
+
+**Steps to add MT5 ticker**:
+1. In Flowsurface, add a new ticker
+2. Select **MetaTrader5** as the exchange
+3. Enter the symbol using the format above
+4. Flowsurface will automatically connect to the specified MT5 server
+
+**Note**: The symbol must match the symbol name in MT5 where the EA is running. For example, if the EA is running on an XAUUSD chart in MT5, use `XAUUSD` (or `XAUUSD@host:port`) in Flowsurface.
 
 ## Supported Symbols
 
