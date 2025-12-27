@@ -18,17 +18,7 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Check if GPG key is configured
-              id: check_gpg
-              run: |
-                  if [ -n "${{ secrets.GPG_PRIVATE_KEY }}" ]; then
-                    echo "has_gpg=true" >> "$GITHUB_OUTPUT"
-                  else
-                    echo "has_gpg=false" >> "$GITHUB_OUTPUT"
-                  fi
-
             - name: Import GPG key and configure Git
-              if: steps.check_gpg.outputs.has_gpg == 'true'
               env:
                   GPG_NAME: ${{ secrets.GPG_NAME }}
                   GPG_EMAIL: ${{ secrets.GPG_EMAIL }}
@@ -49,7 +39,6 @@ jobs:
                   git config gpg.program "$RUNNER_TEMP/gpg-wrapper.sh"
 
             - name: Create signed tag
-              if: steps.check_gpg.outputs.has_gpg == 'true'
               env:
                   TAG: ${{ github.event.inputs.tag }}
                   GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -59,20 +48,6 @@ jobs:
                     exit 0
                   fi
                   git tag -s "$TAG" -m "Release $TAG" HEAD
-                  git push origin "refs/tags/$TAG"
-
-            - name: Create unsigned tag
-              if: steps.check_gpg.outputs.has_gpg == 'false'
-              env:
-                  TAG: ${{ github.event.inputs.tag }}
-              run: |
-                  if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
-                    echo "Tag $TAG already exists, skipping."
-                    exit 0
-                  fi
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git tag -a "$TAG" -m "Release $TAG" HEAD
                   git push origin "refs/tags/$TAG"
 
     build:
@@ -300,38 +275,24 @@ jobs:
 
             - name: Generate checksums
               run: |
-                  set -e
-                  {
-                    # Universal macOS
-                    sha256sum artifacts/macos-universal/flowsurface-universal-macos.tar.gz | awk '{print $1 "  flowsurface-universal-macos.tar.gz"}'
-                    # Windows x64
-                    sha256sum artifacts/windows-x64/flowsurface-x86_64-windows.zip | awk '{print $1 "  flowsurface-x86_64-windows.zip"}'
-                    # Linux x64
-                    sha256sum artifacts/linux-x64/flowsurface-x86_64-linux.tar.gz | awk '{print $1 "  flowsurface-x86_64-linux.tar.gz"}'
-                    # Linux ARM
-                    sha256sum artifacts/linux-arm/flowsurface-aarch64-linux.tar.gz | awk '{print $1 "  flowsurface-aarch64-linux.tar.gz"}'
-                  } >> SHA256SUMS
+                  # Universal macOS
+                  sha256sum artifacts/macos-universal/flowsurface-universal-macos.tar.gz | awk '{print $1 "  flowsurface-universal-macos.tar.gz"}' >> SHA256SUMS
+                  # Windows x64
+                  sha256sum artifacts/windows-x64/flowsurface-x86_64-windows.zip | awk '{print $1 "  flowsurface-x86_64-windows.zip"}' >> SHA256SUMS
+                  # Linux x64
+                  sha256sum artifacts/linux-x64/flowsurface-x86_64-linux.tar.gz | awk '{print $1 "  flowsurface-x86_64-linux.tar.gz"}' >> SHA256SUMS
+                  # Linux ARM
+                  sha256sum artifacts/linux-arm/flowsurface-aarch64-linux.tar.gz | awk '{print $1 "  flowsurface-aarch64-linux.tar.gz"}' >> SHA256SUMS
 
                   cat SHA256SUMS
 
-            - name: Check if GPG key is configured
-              id: check_gpg
-              run: |
-                  if [ -n "${{ secrets.GPG_PRIVATE_KEY }}" ]; then
-                    echo "has_gpg=true" >> "$GITHUB_OUTPUT"
-                  else
-                    echo "has_gpg=false" >> "$GITHUB_OUTPUT"
-                  fi
-
             - name: Import GPG key
-              if: steps.check_gpg.outputs.has_gpg == 'true'
               run: |
                   echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
                   echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
                   gpg-connect-agent reloadagent /bye
 
             - name: Sign checksums
-              if: steps.check_gpg.outputs.has_gpg == 'true'
               env:
                   GPG_TTY: /dev/null
               run: |
@@ -352,7 +313,6 @@ jobs:
                   asset_content_type: text/plain
 
             - name: Upload signature as release asset
-              if: steps.check_gpg.outputs.has_gpg == 'true'
               uses: actions/upload-release-asset@v1
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

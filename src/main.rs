@@ -31,82 +31,12 @@ use iced::{
 };
 use std::{borrow::Cow, collections::HashMap, vec};
 
-#[cfg(all(target_os = "windows", not(debug_assertions)))]
-const CRASH_LOG_FILE: &str = "crash.log";
-
-#[cfg(all(target_os = "windows", not(debug_assertions)))]
-fn show_error_message(title: &str, message: &str) {
-    use std::ffi::OsStr;
-    use std::iter::once;
-    use std::os::windows::ffi::OsStrExt;
-
-    let wide_title: Vec<u16> = OsStr::new(title).encode_wide().chain(once(0)).collect();
-    let wide_message: Vec<u16> = OsStr::new(message).encode_wide().chain(once(0)).collect();
-
-    unsafe {
-        windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
-            windows::Win32::Foundation::HWND(0),
-            windows::Win32::Foundation::PCWSTR(wide_message.as_ptr()),
-            windows::Win32::Foundation::PCWSTR(wide_title.as_ptr()),
-            windows::Win32::UI::WindowsAndMessaging::MB_OK
-                | windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
-        );
-    }
-}
-
 fn main() {
-    // Set up panic handler for Windows release builds to show errors
-    #[cfg(all(target_os = "windows", not(debug_assertions)))]
-    std::panic::set_hook(Box::new(|panic_info| {
-        let location_str = panic_info
-            .location()
-            .map(|l| l.to_string())
-            .unwrap_or_else(|| "Unknown".to_string());
-
-        let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-            format!("Application panicked: {}\n\nLocation: {}", s, location_str)
-        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
-            format!("Application panicked: {}\n\nLocation: {}", s, location_str)
-        } else {
-            format!(
-                "Application panicked with unknown payload\n\nLocation: {}",
-                location_str
-            )
-        };
-        show_error_message("Flowsurface Error", &message);
-
-        // Write to crash log file
-        let log_path = data::data_path(Some(CRASH_LOG_FILE));
-        if let Some(parent) = log_path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("Failed to create crash log directory {:?}: {}", parent, e);
-            }
-        }
-        let timestamp = chrono::Utc::now().to_rfc3339();
-        if let Err(e) = std::fs::write(&log_path, format!("{}\n{}", timestamp, message)) {
-            eprintln!("Failed to write crash log to {:?}: {}", log_path, e);
-        }
-    }));
-
-    if let Err(e) = logger::setup(cfg!(debug_assertions)) {
-        #[cfg(all(target_os = "windows", not(debug_assertions)))]
-        {
-            show_error_message(
-                "Flowsurface - Logger Error",
-                &format!("Failed to initialize logger: {}", e),
-            );
-            return;
-        }
-        #[cfg(not(all(target_os = "windows", not(debug_assertions))))]
-        {
-            eprintln!("Failed to initialize logger: {}", e);
-            return;
-        }
-    }
+    logger::setup(cfg!(debug_assertions)).expect("Failed to initialize logger");
 
     std::thread::spawn(data::cleanup_old_market_data);
 
-    if let Err(e) = iced::daemon(Flowsurface::new, Flowsurface::update, Flowsurface::view)
+    let _ = iced::daemon(Flowsurface::new, Flowsurface::update, Flowsurface::view)
         .settings(iced::Settings {
             antialiasing: true,
             fonts: vec![
@@ -120,20 +50,7 @@ fn main() {
         .theme(Flowsurface::theme)
         .scale_factor(Flowsurface::scale_factor)
         .subscription(Flowsurface::subscription)
-        .run()
-    {
-        #[cfg(all(target_os = "windows", not(debug_assertions)))]
-        {
-            show_error_message(
-                "Flowsurface - Runtime Error",
-                &format!("Failed to run application: {}", e),
-            );
-        }
-        #[cfg(not(all(target_os = "windows", not(debug_assertions))))]
-        {
-            eprintln!("Failed to run application: {}", e);
-        }
-    }
+        .run();
 }
 
 struct Flowsurface {
