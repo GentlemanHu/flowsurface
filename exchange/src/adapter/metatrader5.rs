@@ -33,9 +33,17 @@ fn parse_mt5_connection(ticker: &Ticker) -> (String, String, u16) {
         
         if let Some(colon_pos) = connection.find(':') {
             let host = connection[..colon_pos].to_string();
-            let port = connection[colon_pos + 1..]
-                .parse::<u16>()
-                .unwrap_or(DEFAULT_PORT);
+            let port_str = &connection[colon_pos + 1..];
+            let port = match port_str.parse::<u16>() {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!(
+                        "Failed to parse port '{}' in connection string '{}': {}. Using default port {}",
+                        port_str, symbol_str, e, DEFAULT_PORT
+                    );
+                    DEFAULT_PORT
+                }
+            };
             (symbol, host, port)
         } else {
             (symbol, connection.to_string(), DEFAULT_PORT)
