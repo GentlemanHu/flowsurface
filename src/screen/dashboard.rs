@@ -21,7 +21,7 @@ use exchange::{
     Kline, PushFrequency, StreamPairKind, TickMultiplier, TickerInfo, Timeframe, Trade,
     adapter::{
         self, AdapterError, Exchange, PersistStreamKind, ResolvedStream, StreamConfig, StreamKind,
-        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, okex, metatrader5,
+        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, metatrader5, okex,
     },
     depth::Depth,
     fetcher::{FetchRange, FetchedData},
@@ -35,7 +35,7 @@ use iced::{
         pane_grid::{self, Configuration},
     },
 };
-use iced_futures::futures::{stream, TryFutureExt};
+use iced_futures::futures::{TryFutureExt, stream};
 use std::{collections::HashMap, path::PathBuf, time::Instant, vec};
 
 #[derive(Debug, Clone)]

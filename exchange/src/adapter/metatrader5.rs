@@ -4,7 +4,7 @@ use super::{
         TickerInfo, TickerStats, Timeframe, Trade,
         adapter::StreamTicksize,
         depth::{DeOrder, DepthPayload, DepthUpdate, LocalDepthCache},
-        is_symbol_supported, volume_size_unit,
+        volume_size_unit,
     },
     AdapterError, Event,
 };
@@ -15,8 +15,8 @@ use iced_futures::{
 };
 use serde::Deserialize;
 use std::{collections::HashMap, net::SocketAddr};
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 
 const DEFAULT_PORT: u16 = 7878;
 
@@ -32,6 +32,7 @@ fn exchange_from_market_type(market: MarketKind) -> Exchange {
 #[serde(tag = "type")]
 enum Mt5Message {
     #[serde(rename = "ticker_info")]
+    #[allow(dead_code)]
     TickerInfo(Mt5TickerInfo),
     #[serde(rename = "trade")]
     Trade(Mt5Trade),
@@ -40,10 +41,12 @@ enum Mt5Message {
     #[serde(rename = "kline")]
     Kline(Mt5Kline),
     #[serde(rename = "ticker_price")]
+    #[allow(dead_code)]
     TickerPrice(Mt5TickerPrice),
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Mt5TickerInfo {
     symbol: String,
     tick_size: f32,
@@ -53,6 +56,7 @@ struct Mt5TickerInfo {
 
 #[derive(Debug, Deserialize)]
 struct Mt5Trade {
+    #[allow(dead_code)]
     symbol: String,
     time: u64,
     price: f32,
@@ -62,6 +66,7 @@ struct Mt5Trade {
 
 #[derive(Debug, Deserialize)]
 struct Mt5Depth {
+    #[allow(dead_code)]
     symbol: String,
     time: u64,
     bids: Vec<[f32; 2]>, // [price, volume]
@@ -70,6 +75,7 @@ struct Mt5Depth {
 
 #[derive(Debug, Deserialize)]
 struct Mt5Kline {
+    #[allow(dead_code)]
     symbol: String,
     time: u64,
     open: f32,
@@ -81,6 +87,7 @@ struct Mt5Kline {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Mt5TickerPrice {
     symbol: String,
     bid: f32,
@@ -131,7 +138,7 @@ pub async fn fetch_klines(
 /// This creates a TCP server that listens for connections from the MT5 EA
 pub fn connect_market_stream(
     ticker_info: TickerInfo,
-    push_freq: PushFrequency,
+    _push_freq: PushFrequency,
 ) -> impl Stream<Item = Event> {
     stream::channel(100, move |mut output: mpsc::Sender<Event>| async move {
         let ticker = ticker_info.ticker;
@@ -145,7 +152,7 @@ pub fn connect_market_stream(
 
         // Start TCP server to listen for MT5 EA connections
         let addr = SocketAddr::from(([127, 0, 0, 1], DEFAULT_PORT));
-        
+
         let listener = match TcpListener::bind(&addr).await {
             Ok(l) => {
                 log::info!("MT5 TCP server listening on {}", addr);
@@ -169,7 +176,7 @@ pub fn connect_market_stream(
             match listener.accept().await {
                 Ok((stream, peer_addr)) => {
                     log::info!("MT5 EA connected from {}", peer_addr);
-                    
+
                     // Handle this connection
                     if let Err(e) = handle_mt5_connection(
                         stream,
@@ -273,8 +280,7 @@ async fn process_mt5_message(
             let trade = Trade {
                 time: mt5_trade.time,
                 is_sell: mt5_trade.is_sell,
-                price: Price::from_f32(mt5_trade.price)
-                    .round_to_min_tick(ticker_info.min_ticksize),
+                price: Price::from_f32(mt5_trade.price).round_to_min_tick(ticker_info.min_ticksize),
                 qty,
             };
 
@@ -332,14 +338,10 @@ async fn process_mt5_message(
         Mt5Message::Kline(mt5_kline) => {
             let kline = Kline {
                 time: mt5_kline.time,
-                open: Price::from_f32(mt5_kline.open)
-                    .round_to_min_tick(ticker_info.min_ticksize),
-                high: Price::from_f32(mt5_kline.high)
-                    .round_to_min_tick(ticker_info.min_ticksize),
-                low: Price::from_f32(mt5_kline.low)
-                    .round_to_min_tick(ticker_info.min_ticksize),
-                close: Price::from_f32(mt5_kline.close)
-                    .round_to_min_tick(ticker_info.min_ticksize),
+                open: Price::from_f32(mt5_kline.open).round_to_min_tick(ticker_info.min_ticksize),
+                high: Price::from_f32(mt5_kline.high).round_to_min_tick(ticker_info.min_ticksize),
+                low: Price::from_f32(mt5_kline.low).round_to_min_tick(ticker_info.min_ticksize),
+                close: Price::from_f32(mt5_kline.close).round_to_min_tick(ticker_info.min_ticksize),
                 volume: (mt5_kline.volume, 0.0), // MT5 doesn't separate buy/sell volume
             };
 

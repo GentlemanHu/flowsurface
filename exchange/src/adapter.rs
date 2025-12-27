@@ -12,8 +12,8 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 pub mod binance;
 pub mod bybit;
 pub mod hyperliquid;
-pub mod okex;
 pub mod metatrader5;
+pub mod okex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResolvedStream {
@@ -659,9 +659,7 @@ pub async fn fetch_ticker_info(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_ticksize(market_type).await
         }
-        Exchange::MetaTrader5Spot => {
-            metatrader5::fetch_ticksize(market_type).await
-        }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_ticksize(market_type).await,
     }
 }
 
@@ -683,9 +681,7 @@ pub async fn fetch_ticker_prices(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_ticker_prices(market_type).await
         }
-        Exchange::MetaTrader5Spot => {
-            metatrader5::fetch_ticker_prices(market_type).await
-        }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_ticker_prices(market_type).await,
     }
 }
 
@@ -707,9 +703,7 @@ pub async fn fetch_klines(
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => {
             okex::fetch_klines(ticker_info, timeframe, range).await
         }
-        Exchange::MetaTrader5Spot => {
-            metatrader5::fetch_klines(ticker_info, timeframe, range).await
-        }
+        Exchange::MetaTrader5Spot => metatrader5::fetch_klines(ticker_info, timeframe, range).await,
     }
 }
 
