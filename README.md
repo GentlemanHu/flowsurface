@@ -62,7 +62,7 @@ Standalone executables are available for Windows, macOS, and Linux on the [Relea
  
 Since these binaries are currently unsigned they might get flagged.
 
--   **Windows**: If you see a "Windows protected your PC" pop-up, click **More info** -> **Run anyway**.
+-   **Windows**: If you see a "Windows protected your PC" pop-up, click **More info** -> **Run anyway**. If the executable doesn't respond or shows errors, see the [Windows Troubleshooting Guide](docs/WINDOWS_TROUBLESHOOTING.md).
 -   **macOS**: If you see "Developer cannot be verified", control-click (right-click) the app and select **Open**, or go to _System Settings > Privacy & Security_ to allow it.
 </details>
 
