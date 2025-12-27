@@ -300,6 +300,7 @@ jobs:
 
             - name: Generate checksums
               run: |
+                  set -e
                   {
                     # Universal macOS
                     sha256sum artifacts/macos-universal/flowsurface-universal-macos.tar.gz | awk '{print $1 "  flowsurface-universal-macos.tar.gz"}'

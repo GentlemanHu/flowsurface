@@ -73,13 +73,12 @@ fn main() {
         // Write to crash log file
         let log_path = data::data_path(Some(CRASH_LOG_FILE));
         if let Some(parent) = log_path.parent() {
-            if !parent.exists() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("Failed to create crash log directory {:?}: {}", parent, e);
-                }
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Failed to create crash log directory {:?}: {}", parent, e);
             }
         }
-        if let Err(e) = std::fs::write(&log_path, format!("{}\n{}", chrono::Utc::now(), message)) {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        if let Err(e) = std::fs::write(&log_path, format!("{}\n{}", timestamp, message)) {
             eprintln!("Failed to write crash log to {:?}: {}", log_path, e);
         }
     }));
