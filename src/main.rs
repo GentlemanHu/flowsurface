@@ -74,7 +74,9 @@ fn main() {
         let log_path = data::data_path(Some(CRASH_LOG_FILE));
         if let Some(parent) = log_path.parent() {
             if !parent.exists() {
-                let _ = std::fs::create_dir_all(parent);
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("Failed to create crash log directory {:?}: {}", parent, e);
+                }
             }
         }
         if let Err(e) = std::fs::write(&log_path, format!("{}\n{}", chrono::Utc::now(), message)) {
