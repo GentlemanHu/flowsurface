@@ -25,12 +25,12 @@ const DEFAULT_HOST: &str = "127.0.0.1";
 /// Format: "SYMBOL@HOST:PORT" or "SYMBOL" (uses defaults)
 fn parse_mt5_connection(ticker: &Ticker) -> (String, String, u16) {
     let (symbol_str, _) = ticker.to_full_symbol_and_type();
-    
+
     // Check if symbol contains connection info
     if let Some(at_pos) = symbol_str.find('@') {
         let symbol = symbol_str[..at_pos].to_string();
         let connection = &symbol_str[at_pos + 1..];
-        
+
         if let Some(colon_pos) = connection.find(':') {
             let host = connection[..colon_pos].to_string();
             let port_str = &connection[colon_pos + 1..];
@@ -39,7 +39,10 @@ fn parse_mt5_connection(ticker: &Ticker) -> (String, String, u16) {
                 Err(e) => {
                     log::warn!(
                         "Failed to parse port '{}' in connection string '{}': {}. Using default port {}",
-                        port_str, symbol_str, e, DEFAULT_PORT
+                        port_str,
+                        symbol_str,
+                        e,
+                        DEFAULT_PORT
                     );
                     DEFAULT_PORT
                 }
@@ -182,7 +185,12 @@ pub fn connect_market_stream(
         let mut orderbook: LocalDepthCache = LocalDepthCache::default();
         let mut trades_buffer: Vec<Trade> = Vec::new();
 
-        log::info!("Starting MT5 market stream for {} (connecting to {}:{})", symbol_str, host, port);
+        log::info!(
+            "Starting MT5 market stream for {} (connecting to {}:{})",
+            symbol_str,
+            host,
+            port
+        );
 
         // Connect to MT5 EA server with retry logic
         loop {
