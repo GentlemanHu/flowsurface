@@ -29,11 +29,11 @@ An experimental open-source desktop charting application. Supports Binance, Bybi
 -   Multi window/monitor support
 -   Pane linking for quickly switching tickers across multiple panes
 -   Persistent layouts and customizable themes with editable color palettes
--   **MetaTrader 5 Integration**: Connect your MT5 terminal to view forex, metals (XAUUSD/XAGUSD), indices, and crypto markets with full footprint support
+-   **MetaTrader 5 Integration**: Connect your MT5 terminal to view forex, metals (XAUUSD/XAGUSD), indices, and crypto markets with full footprint support. Supports both local and remote connections (e.g., VPS).
 
 ##### Market data is received directly from exchanges' public REST APIs and WebSockets
 
-For MetaTrader 5, market data is received via a local TCP connection from an MQL5 Expert Advisor. See [`mql5/README.md`](mql5/README.md) for setup instructions.
+For MetaTrader 5, the MQL5 Expert Advisor runs as a TCP server, and Flowsurface connects as a client. This enables remote connections to MT5 running on different machines or VPS. See [`mql5/README.md`](mql5/README.md) for setup instructions.
 
 #
 

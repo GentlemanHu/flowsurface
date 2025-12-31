@@ -5,12 +5,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024, Flowsurface"
 #property link      "https://flowsurface.com"
-#property version   "1.00"
-#property description "Expert Advisor to send MT5 market data to Flowsurface application"
+#property version   "2.00"
+#property description "Expert Advisor to provide MT5 market data via TCP server"
 
 //--- Input parameters
-input string   FlowsurfaceHost = "127.0.0.1";  // Flowsurface server host
-input int      FlowsurfacePort = 7878;          // Flowsurface server port
+input int      ServerPort = 7878;                // MT5 Server port for Flowsurface to connect
 input int      DepthLevels = 10;                // Number of depth levels to send
 input bool     SendTrades = true;               // Send trade data
 input bool     SendDepth = true;                // Send depth data
@@ -18,30 +17,30 @@ input bool     SendKlines = true;               // Send kline data
 input int      UpdateIntervalMs = 100;          // Update interval in milliseconds
 
 //--- Global variables
-int socket = INVALID_HANDLE;
+int serverSocket = INVALID_HANDLE;
+int clientSocket = INVALID_HANDLE;
 datetime lastKlineTime = 0;
 bool isConnected = false;
+bool serverRunning = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    Print("Flowsurface Connector EA starting...");
+    Print("Flowsurface Connector EA starting as TCP server...");
     
-    // Connect to Flowsurface server
-    if(!ConnectToFlowsurface())
+    // Start TCP server to listen for Flowsurface client connections
+    if(!StartTCPServer())
     {
-        Print("Failed to connect to Flowsurface at ", FlowsurfaceHost, ":", FlowsurfacePort);
+        Print("Failed to start TCP server on port ", ServerPort);
         return(INIT_FAILED);
     }
     
-    Print("Successfully connected to Flowsurface");
+    Print("TCP server started successfully on port ", ServerPort);
+    Print("Waiting for Flowsurface client to connect...");
     
-    // Send ticker info on startup
-    SendTickerInfo();
-    
-    // Set timer for periodic updates
+    // Set timer for periodic updates and connection check
     EventSetMillisecondTimer(UpdateIntervalMs);
     
     return(INIT_SUCCEEDED);
@@ -54,10 +53,16 @@ void OnDeinit(const int reason)
 {
     EventKillTimer();
     
-    if(socket != INVALID_HANDLE)
+    if(clientSocket != INVALID_HANDLE)
     {
-        SocketClose(socket);
-        socket = INVALID_HANDLE;
+        SocketClose(clientSocket);
+        clientSocket = INVALID_HANDLE;
+    }
+    
+    if(serverSocket != INVALID_HANDLE)
+    {
+        SocketClose(serverSocket);
+        serverSocket = INVALID_HANDLE;
     }
     
     Print("Flowsurface Connector EA stopped. Reason: ", reason);
@@ -68,9 +73,10 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-    // Ensure connection is alive
-    if(!isConnected && !ConnectToFlowsurface())
+    // Check for new client connections if not connected
+    if(!isConnected)
     {
+        CheckForClientConnection();
         return;
     }
     
@@ -115,35 +121,68 @@ void OnBookEvent(const string &symbol)
 }
 
 //+------------------------------------------------------------------+
-//| Connect to Flowsurface server                                    |
+//| Start TCP Server                                                 |
 //+------------------------------------------------------------------+
-bool ConnectToFlowsurface()
+bool StartTCPServer()
 {
-    if(socket != INVALID_HANDLE)
+    if(serverSocket != INVALID_HANDLE)
     {
-        SocketClose(socket);
-        socket = INVALID_HANDLE;
+        SocketClose(serverSocket);
+        serverSocket = INVALID_HANDLE;
     }
     
-    socket = SocketCreate();
-    if(socket == INVALID_HANDLE)
+    serverSocket = SocketCreate();
+    if(serverSocket == INVALID_HANDLE)
     {
-        Print("Failed to create socket: ", GetLastError());
-        isConnected = false;
+        Print("Failed to create server socket: ", GetLastError());
         return false;
     }
     
-    if(!SocketConnect(socket, FlowsurfaceHost, FlowsurfacePort, 5000))
+    // Bind and listen on the specified port
+    if(!SocketListen(serverSocket, ServerPort))
     {
-        Print("Failed to connect socket: ", GetLastError());
-        SocketClose(socket);
-        socket = INVALID_HANDLE;
-        isConnected = false;
+        Print("Failed to listen on port ", ServerPort, ": ", GetLastError());
+        SocketClose(serverSocket);
+        serverSocket = INVALID_HANDLE;
         return false;
     }
     
-    isConnected = true;
+    serverRunning = true;
     return true;
+}
+
+//+------------------------------------------------------------------+
+//| Check for client connection                                      |
+//+------------------------------------------------------------------+
+void CheckForClientConnection()
+{
+    if(!serverRunning || serverSocket == INVALID_HANDLE)
+    {
+        return;
+    }
+    
+    // Try to accept a client connection
+    // Called periodically from OnTimer (every UpdateIntervalMs, default 100ms)
+    // This is simple and efficient for the single-client use case
+    int newClientSocket = SocketAccept(serverSocket);
+    
+    if(newClientSocket != INVALID_HANDLE)
+    {
+        // Close any existing client connection
+        if(clientSocket != INVALID_HANDLE)
+        {
+            Print("Closing previous client connection");
+            SocketClose(clientSocket);
+        }
+        
+        clientSocket = newClientSocket;
+        isConnected = true;
+        
+        Print("Flowsurface client connected!");
+        
+        // Send ticker info on new connection
+        SendTickerInfo();
+    }
 }
 
 //+------------------------------------------------------------------+
@@ -268,7 +307,7 @@ void SendKlineData()
 //+------------------------------------------------------------------+
 void SendData(string data)
 {
-    if(socket == INVALID_HANDLE || !isConnected)
+    if(clientSocket == INVALID_HANDLE || !isConnected)
     {
         return;
     }
@@ -276,13 +315,14 @@ void SendData(string data)
     uchar buffer[];
     StringToCharArray(data, buffer, 0, StringLen(data));
     
-    int sent = SocketSend(socket, buffer, ArraySize(buffer));
+    int sent = SocketSend(clientSocket, buffer, ArraySize(buffer));
     if(sent < 0)
     {
         Print("Failed to send data: ", GetLastError());
+        Print("Client disconnected, closing connection");
         isConnected = false;
-        SocketClose(socket);
-        socket = INVALID_HANDLE;
+        SocketClose(clientSocket);
+        clientSocket = INVALID_HANDLE;
     }
 }
 

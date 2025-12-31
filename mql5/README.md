@@ -1,14 +1,34 @@
 # MetaTrader 5 Integration for Flowsurface
 
-This directory contains the MQL5 Expert Advisor (EA) that enables MetaTrader 5 to send market data to Flowsurface.
+This directory contains the MQL5 Expert Advisor (EA) that enables MetaTrader 5 to provide market data to Flowsurface.
 
 ## Overview
 
-The Flowsurface Connector EA establishes a TCP connection to the Flowsurface application and streams real-time market data including:
+The Flowsurface Connector EA creates a TCP server in MetaTrader 5 and waits for Flowsurface to connect as a client. This architecture enables:
+- **Remote connections**: Connect to MT5 running on a different machine (e.g., VPS)
+- **Multiple instances**: Run MT5 on one machine and Flowsurface on another
+- **Flexible deployment**: Connect from anywhere on your network
+
+The EA streams real-time market data including:
 - **Trade Data**: Individual trades with price, volume, and direction
 - **Market Depth**: Order book data with configurable depth levels
 - **Candlestick/Kline Data**: OHLCV data for various timeframes
 - **Symbol Information**: Tick size, minimum volume, and other symbol specifications
+
+## Architecture
+
+```
+┌─────────────────┐                    ┌──────────────────┐
+│   MetaTrader 5  │                    │   Flowsurface    │
+│                 │                    │                  │
+│  FlowsurfaceEA  │ ◄──TCP Server──── │  MT5 Adapter     │
+│  (Port 7878)    │    (Port 7878)     │  (TCP Client)    │
+└─────────────────┘                    └──────────────────┘
+      Server                                  Client
+   (Data Provider)                      (Data Consumer)
+```
+
+**Key Change**: MQL5 now acts as the **server** (listens for connections), and Flowsurface acts as the **client** (connects to MQL5). This enables remote connections across networks.
 
 ## Installation
 
@@ -34,17 +54,20 @@ MetaTrader 5 requires explicit permission to create socket connections:
 2. Go to **Tools** → **Options** (or press Ctrl+O)
 3. Navigate to the **Expert Advisors** tab
 4. Check the option: **Allow DLL imports**
-5. Check the option: **Allow WebRequest for listed URL**
-6. Add `127.0.0.1` to the allowed URLs list
-7. Click **OK**
+5. Click **OK**
 
-### Step 3: Run Flowsurface
+**Note**: Since MT5 now acts as a server, there's no need to add URLs to the WebRequest whitelist.
 
-Start the Flowsurface application. The MetaTrader 5 adapter will listen for connections on port 7878 by default.
+### Step 3: Configure Firewall (for Remote Connections)
 
-```bash
-cargo run --release
-```
+If you want to connect to MT5 from a different machine:
+
+1. Open port 7878 (or your chosen port) in your firewall
+2. On Windows: Windows Defender Firewall → Advanced Settings → Inbound Rules → New Rule
+3. Choose Port → TCP → Specific port (7878) → Allow the connection
+4. Make sure your VPS/server security group also allows this port
+
+**Security Warning**: Only open firewall ports when necessary. Consider using VPN or SSH tunneling for production use.
 
 ### Step 4: Attach the EA to a Chart
 
@@ -52,8 +75,7 @@ cargo run --release
 2. In the **Navigator** panel, expand **Expert Advisors**
 3. Drag `FlowsurfaceConnector` onto the chart
 4. In the EA settings dialog, you can configure:
-   - **FlowsurfaceHost**: IP address of Flowsurface (default: 127.0.0.1)
-   - **FlowsurfacePort**: Port number (default: 7878)
+   - **ServerPort**: Port number for the TCP server (default: 7878)
    - **DepthLevels**: Number of order book levels to send (default: 10)
    - **SendTrades**: Enable/disable trade data streaming
    - **SendDepth**: Enable/disable market depth streaming
@@ -61,6 +83,29 @@ cargo run --release
    - **UpdateIntervalMs**: Data update interval in milliseconds (default: 100)
 5. Check **Allow live trading** (required for socket connections)
 6. Click **OK**
+
+The EA will start a TCP server and wait for Flowsurface to connect.
+
+### Step 5: Configure Flowsurface to Connect
+
+When adding a MetaTrader 5 ticker in Flowsurface, use the following symbol format:
+
+**Symbol Format**: `SYMBOL@HOST:PORT` or just `SYMBOL` (uses defaults)
+
+**Examples**:
+- Local connection: `XAUUSD` (connects to 127.0.0.1:7878)
+- Local with explicit host: `XAUUSD@127.0.0.1:7878`
+- LAN connection: `XAUUSD@192.168.1.100:7878`
+- Remote/VPS connection: `XAUUSD@203.0.113.10:7878` or `XAUUSD@mt5.example.com:7878`
+- Custom port: `EURUSD@192.168.1.100:8888`
+
+**Steps to add MT5 ticker**:
+1. In Flowsurface, add a new ticker
+2. Select **MetaTrader5** as the exchange
+3. Enter the symbol using the format above
+4. Flowsurface will automatically connect to the specified MT5 server
+
+**Note**: The symbol must match the symbol name in MT5 where the EA is running. For example, if the EA is running on an XAUUSD chart in MT5, use `XAUUSD` (or `XAUUSD@host:port`) in Flowsurface.
 
 ## Supported Symbols
 
@@ -127,28 +172,59 @@ The EA sends JSON-formatted messages over TCP, one message per line. Message typ
 
 ### EA won't start
 - Ensure **Allow DLL imports** is enabled in Tools → Options → Expert Advisors
-- Check that Flowsurface is running and listening on the specified port
-- Verify socket permissions are enabled for `127.0.0.1`
+- Check that port 7878 (or your chosen port) is not already in use
+- Verify that another EA or application isn't using the same port
+
+### Flowsurface can't connect
+- Check that the MT5 EA is running (you should see "TCP server started successfully" in the Experts tab)
+- Verify the host and port settings in Flowsurface match the EA configuration
+- For remote connections:
+  - Ensure firewall allows incoming connections on the specified port
+  - Check network connectivity between machines
+  - Verify VPS/server security group settings
+- Test local connection first (127.0.0.1) before trying remote connections
 
 ### No data appearing in Flowsurface
 - Check the MT5 **Experts** tab in the Terminal window for error messages
 - Ensure the symbol has active market data (chart is receiving ticks)
 - For market depth, ensure your broker provides DOM (Depth of Market) data
-- Verify the connection by checking if the EA shows "Successfully connected to Flowsurface"
+- Verify the EA shows "Flowsurface client connected!" after Flowsurface connects
 
 ### Connection drops frequently
 - Increase the `UpdateIntervalMs` parameter to reduce network load
-- Check your network connection and firewall settings
-- Ensure Flowsurface hasn't crashed or restarted
+- Check your network connection stability
+- For remote connections, consider network latency and bandwidth
+- Monitor MT5 Experts log for disconnection messages
 
 ## Features
 
+- **Remote connections**: Connect to MT5 running anywhere on your network or VPS
 - **Real-time streaming**: Sub-second latency for market data
-- **Automatic reconnection**: EA will attempt to reconnect if the connection drops
+- **Automatic reconnection**: Flowsurface can reconnect if the connection drops
 - **Configurable update rate**: Adjust the data refresh interval based on your needs
-- **Multiple symbols**: Run the EA on multiple charts to monitor different symbols
+- **Multiple symbols**: Run the EA on multiple charts to monitor different symbols simultaneously
 - **Market depth support**: Full order book data for footprint charts
 - **Trade detection**: Real-time trade execution data
+
+## Remote Connection Examples
+
+### Local Connection (Same Machine)
+- MT5 and Flowsurface on the same computer
+- Host: `127.0.0.1` or `localhost`
+- Port: `7878` (default)
+
+### LAN Connection
+- MT5 on desktop, Flowsurface on laptop (same network)
+- Host: Local IP of MT5 machine (e.g., `192.168.1.100`)
+- Port: `7878` (default)
+- Ensure firewall allows the connection
+
+### Remote/VPS Connection
+- MT5 on VPS, Flowsurface on local machine
+- Host: Public IP or domain of VPS (e.g., `203.0.113.10` or `mt5.example.com`)
+- Port: `7878` (default, or custom port)
+- Configure VPS firewall and security group
+- **Recommended**: Use VPN or SSH tunnel for secure connections
 
 ## Performance Tips
 
@@ -164,4 +240,24 @@ The EA sends JSON-formatted messages over TCP, one message per line. Message typ
 
 ## Security Note
 
-The default configuration connects to `localhost` (127.0.0.1), which is safe and doesn't expose your system to external connections. If you need to connect to Flowsurface running on a different machine, ensure proper firewall rules and network security measures are in place.
+The default configuration accepts connections from any IP address on the specified port. 
+
+**For local use**: This is safe when MT5 and Flowsurface are on the same machine.
+
+**For network/remote use**: 
+- Ensure proper firewall configuration
+- Only open necessary ports
+- Consider these security measures:
+  1. Use a VPN for connections over the internet
+  2. Set up SSH tunneling for encrypted connections
+  3. Restrict firewall rules to specific IP addresses
+  4. Use a non-standard port to reduce exposure
+  5. Monitor connection logs in MT5 Experts tab
+
+**Example SSH Tunnel** (for advanced users):
+```bash
+# On local machine, forward local port 7878 to VPS port 7878
+ssh -L 7878:localhost:7878 user@vps-ip
+
+# Then connect Flowsurface to localhost:7878
+```
