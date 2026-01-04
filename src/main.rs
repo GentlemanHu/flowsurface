@@ -449,16 +449,13 @@ impl Flowsurface {
                     modal::mt5_config::Action::SaveConfig(_config) => {
                         // TODO: Save config to state and persist
                         self.sidebar.set_menu(None);
-                        self.notifications.push(widget::toast::Toast::info(
-                            "MT5 configuration saved".to_string(),
-                        ));
+                        self.notifications
+                            .push(Toast::warn("MT5 configuration saved".to_string()));
                     }
                     modal::mt5_config::Action::TestConnection(_config) => {
                         // TODO: Implement connection test
-                        // For now, just show a message
-                        self.notifications.push(widget::toast::Toast::info(
-                            "Connection test not yet implemented".to_string(),
-                        ));
+                        self.notifications
+                            .push(Toast::warn("Connection test not yet implemented".to_string()));
                     }
                     modal::mt5_config::Action::None => {}
                 }
