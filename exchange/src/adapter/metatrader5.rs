@@ -424,8 +424,7 @@ fn parse_trade(msg: &str, ticker_info: TickerInfo) -> Result<Trade, AdapterError
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
     let is_sell = mt5_trade.side == "sell";
-    let price =
-        Price::from_f32(mt5_trade.price as f32).round_to_min_tick(ticker_info.min_ticksize);
+    let price = Price::from_f32(mt5_trade.price as f32).round_to_min_tick(ticker_info.min_ticksize);
 
     Ok(Trade {
         time: mt5_trade.time,

@@ -14,7 +14,7 @@ use data::config::theme::default_theme;
 use data::{layout::WindowSpec, sidebar};
 use layout::{LayoutId, configuration};
 use modal::{LayoutManager, ThemeEditor, audio::AudioStream};
-use modal::{dashboard_modal, main_dialog_modal};
+use modal::{Mt5ConfigModal, dashboard_modal, main_dialog_modal};
 use screen::dashboard::{self, Dashboard};
 use widget::{
     confirm_dialog_container,
@@ -59,6 +59,7 @@ struct Flowsurface {
     layout_manager: LayoutManager,
     theme_editor: ThemeEditor,
     audio_stream: AudioStream,
+    mt5_modal: Mt5ConfigModal,
     confirm_dialog: Option<screen::ConfirmDialog<Message>>,
     volume_size_unit: exchange::SizeUnit,
     ui_scale_factor: data::ScaleFactor,
@@ -92,6 +93,7 @@ enum Message {
     ThemeEditor(modal::theme_editor::Message),
     Layouts(modal::layout_manager::Message),
     AudioStream(modal::audio::Message),
+    Mt5Config(modal::mt5_config::Message),
 }
 
 impl Flowsurface {
@@ -116,6 +118,7 @@ impl Flowsurface {
             layout_manager: saved_state.layout_manager,
             theme_editor: ThemeEditor::new(saved_state.custom_theme),
             audio_stream: AudioStream::new(saved_state.audio_cfg),
+            mt5_modal: Mt5ConfigModal::new(),
             sidebar,
             confirm_dialog: None,
             timezone: saved_state.timezone,
@@ -436,6 +439,30 @@ impl Flowsurface {
                 }
             }
             Message::AudioStream(message) => self.audio_stream.update(message),
+            Message::Mt5Config(message) => {
+                let action = self.mt5_modal.update(message);
+
+                match action {
+                    modal::mt5_config::Action::Exit => {
+                        self.sidebar.set_menu(None);
+                    }
+                    modal::mt5_config::Action::SaveConfig(_config) => {
+                        // TODO: Save config to state and persist
+                        self.sidebar.set_menu(None);
+                        self.notifications.push(widget::toast::Toast::info(
+                            "MT5 configuration saved".to_string(),
+                        ));
+                    }
+                    modal::mt5_config::Action::TestConnection(_config) => {
+                        // TODO: Implement connection test
+                        // For now, just show a message
+                        self.notifications.push(widget::toast::Toast::info(
+                            "Connection test not yet implemented".to_string(),
+                        ));
+                    }
+                    modal::mt5_config::Action::None => {}
+                }
+            }
             Message::DataFolderRequested => {
                 if let Err(err) = data::open_data_folder() {
                     self.notifications
@@ -1024,51 +1051,6 @@ impl Flowsurface {
                 )
             }
             sidebar::Menu::Mt5Config => {
-                // MT5 Configuration Modal
-                let mt5_modal_content = {
-                    let title = text("MetaTrader 5 Connection").size(18);
-
-                    let info_text = text(
-                        "Configure connection to your MT5 server running FlowsurfaceServer EA.",
-                    )
-                    .size(13);
-
-                    let placeholder_content = column![
-                        title,
-                        iced::widget::Space::new().height(16),
-                        info_text,
-                        iced::widget::Space::new().height(16),
-                        text("Server Address").size(13),
-                        iced::widget::text_input("e.g., 192.168.1.100:9876", "")
-                            .padding(8)
-                            .size(14),
-                        iced::widget::Space::new().height(8),
-                        text("API Key").size(13),
-                        iced::widget::text_input("Your API key", "").padding(8).size(14),
-                        iced::widget::Space::new().height(8),
-                        text("API Secret").size(13),
-                        iced::widget::text_input("Your API secret", "")
-                            .secure(true)
-                            .padding(8)
-                            .size(14),
-                        iced::widget::Space::new().height(16),
-                        row![
-                            button(text("Cancel").size(13)).on_press(Message::Sidebar(
-                                dashboard::sidebar::Message::ToggleSidebarMenu(None)
-                            )),
-                            iced::widget::Space::new().width(iced::Length::Fill),
-                            button(text("Connect").size(13)),
-                        ]
-                        .spacing(8),
-                    ]
-                    .spacing(4)
-                    .max_width(350);
-
-                    container(placeholder_content)
-                        .padding(24)
-                        .style(style::dashboard_modal)
-                };
-
                 let (align_x, padding) = match sidebar_pos {
                     sidebar::Position::Left => (Alignment::Start, padding::left(44).top(60)),
                     sidebar::Position::Right => (Alignment::End, padding::right(44).top(60)),
@@ -1076,7 +1058,7 @@ impl Flowsurface {
 
                 dashboard_modal(
                     base,
-                    mt5_modal_content,
+                    self.mt5_modal.view().map(Message::Mt5Config),
                     Message::Sidebar(dashboard::sidebar::Message::ToggleSidebarMenu(None)),
                     padding,
                     Alignment::Start,
