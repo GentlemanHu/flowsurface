@@ -30,8 +30,6 @@ pub enum Message {
     Save,
     /// Cancel/close modal
     Cancel,
-    /// Connection test result
-    ConnectionTestResult(bool, String),
 }
 
 /// Actions returned from modal update
@@ -61,14 +59,10 @@ pub enum TestStatus {
 pub struct Mt5ConfigModal {
     /// Current configuration being edited
     config: Mt5Config,
-    /// Original configuration (for cancel)
-    original: Mt5Config,
     /// Connection test status
     test_status: TestStatus,
     /// Whether this is a new connection or editing existing
     is_new: bool,
-    /// Connection name (for display)
-    connection_name: String,
 }
 
 impl Mt5ConfigModal {
@@ -76,27 +70,9 @@ impl Mt5ConfigModal {
     pub fn new() -> Self {
         Self {
             config: Mt5Config::default(),
-            original: Mt5Config::default(),
             test_status: TestStatus::Idle,
             is_new: true,
-            connection_name: "New MT5 Connection".to_string(),
         }
-    }
-
-    /// Create modal for editing existing configuration
-    pub fn edit(config: Mt5Config, name: String) -> Self {
-        Self {
-            config: config.clone(),
-            original: config,
-            test_status: TestStatus::Idle,
-            is_new: false,
-            connection_name: name,
-        }
-    }
-
-    /// Get the current configuration
-    pub fn config(&self) -> &Mt5Config {
-        &self.config
     }
 
     /// Update the modal state

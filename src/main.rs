@@ -454,8 +454,9 @@ impl Flowsurface {
                     }
                     modal::mt5_config::Action::TestConnection(_config) => {
                         // TODO: Implement connection test
-                        self.notifications
-                            .push(Toast::warn("Connection test not yet implemented".to_string()));
+                        self.notifications.push(Toast::warn(
+                            "Connection test not yet implemented".to_string(),
+                        ));
                     }
                     modal::mt5_config::Action::None => {}
                 }
