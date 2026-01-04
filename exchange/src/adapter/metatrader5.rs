@@ -19,11 +19,12 @@
 //! - Optional TLS encryption
 //! - Timestamp-based replay attack prevention
 
-use super::{AdapterError, Event, StreamKind, StreamTicksize};
+#![allow(dead_code)] // TODO: Remove when implementation is complete
+
+use super::{AdapterError, Event};
 use crate::{
-    Kline, OpenInterest, Price, PushFrequency, Ticker, TickerInfo, TickerStats, Timeframe, Trade,
-    depth::{Depth, DepthPayload, DepthUpdate, LocalDepthCache},
-    volume_size_unit, SizeUnit,
+    Kline, Price, PushFrequency, Ticker, TickerInfo, TickerStats, Timeframe, Trade,
+    depth::{DepthPayload, LocalDepthCache},
 };
 
 use iced_futures::{
@@ -31,7 +32,7 @@ use iced_futures::{
     stream,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 // ============================================================================
 // Configuration Types
@@ -142,6 +143,7 @@ struct ServerMessage {
 /// Incoming trade data
 #[derive(Debug, Deserialize)]
 struct Mt5Trade {
+    #[allow(dead_code)]
     symbol: String,
     time: u64,
     price: f64,
@@ -152,6 +154,7 @@ struct Mt5Trade {
 /// Incoming depth data
 #[derive(Debug, Deserialize)]
 struct Mt5Depth {
+    #[allow(dead_code)]
     symbol: String,
     time: u64,
     bids: Vec<[f64; 2]>,
@@ -161,7 +164,9 @@ struct Mt5Depth {
 /// Incoming kline data
 #[derive(Debug, Deserialize)]
 struct Mt5Kline {
+    #[allow(dead_code)]
     symbol: String,
+    #[allow(dead_code)]
     timeframe: String,
     time: u64,
     open: f64,
@@ -169,6 +174,7 @@ struct Mt5Kline {
     low: f64,
     close: f64,
     volume: f64,
+    #[allow(dead_code)]
     tick_volume: u64,
 }
 
@@ -179,13 +185,16 @@ struct Mt5SymbolInfo {
     tick_size: f64,
     min_lot: f64,
     contract_size: f64,
+    #[allow(dead_code)]
     digits: i32,
 }
 
 /// Historical klines response
 #[derive(Debug, Deserialize)]
 struct KlinesResponse {
+    #[allow(dead_code)]
     symbol: String,
+    #[allow(dead_code)]
     timeframe: String,
     data: Vec<Mt5Kline>,
 }
@@ -194,17 +203,6 @@ struct KlinesResponse {
 #[derive(Debug, Deserialize)]
 struct SymbolsResponse {
     data: Vec<Mt5SymbolInfo>,
-}
-
-// ============================================================================
-// Connection State
-// ============================================================================
-
-enum ConnectionState {
-    Disconnected,
-    Connecting,
-    Authenticating,
-    Connected,
 }
 
 // ============================================================================
@@ -217,13 +215,13 @@ pub async fn fetch_ticksize(
 ) -> Result<HashMap<Ticker, Option<TickerInfo>>, AdapterError> {
     // For MT5, we need to connect and request symbol info
     // This is a simplified version that would work with the actual WebSocket
-    
+
     log::info!("Fetching MT5 symbols from {}", config.server_addr);
-    
+
     // Placeholder - in real implementation, connect to WS and request symbols
     // For now, return common forex pairs as examples
     let mut result = HashMap::new();
-    
+
     let common_symbols = [
         ("XAUUSD", 0.01, 0.01, Some(100.0)),
         ("EURUSD", 0.00001, 0.01, None),
@@ -231,13 +229,18 @@ pub async fn fetch_ticksize(
         ("USDJPY", 0.001, 0.01, None),
         ("BTCUSD", 1.0, 0.01, Some(1.0)),
     ];
-    
+
     for (symbol, tick_size, min_qty, contract_size) in common_symbols {
         let ticker = Ticker::new(symbol, super::Exchange::MetaTrader5);
-        let info = TickerInfo::new(ticker, tick_size as f32, min_qty as f32, contract_size.map(|c| c as f32));
+        let info = TickerInfo::new(
+            ticker,
+            tick_size as f32,
+            min_qty as f32,
+            contract_size.map(|c| c as f32),
+        );
         result.insert(ticker, Some(info));
     }
-    
+
     Ok(result)
 }
 
@@ -246,7 +249,7 @@ pub async fn fetch_ticker_prices(
     config: &Mt5Config,
 ) -> Result<HashMap<Ticker, TickerStats>, AdapterError> {
     log::info!("Fetching MT5 ticker prices from {}", config.server_addr);
-    
+
     // Placeholder - in real implementation, connect and fetch real-time prices
     let result = HashMap::new();
     Ok(result)
@@ -254,17 +257,17 @@ pub async fn fetch_ticker_prices(
 
 /// Fetch historical klines from MT5 server
 pub async fn fetch_klines(
-    config: &Mt5Config,
+    _config: &Mt5Config,
     ticker_info: TickerInfo,
     timeframe: Timeframe,
-    range: Option<(u64, u64)>,
+    _range: Option<(u64, u64)>,
 ) -> Result<Vec<Kline>, AdapterError> {
     log::info!(
         "Fetching MT5 klines for {} {:?}",
         ticker_info.ticker,
         timeframe
     );
-    
+
     // Placeholder - in real implementation, send get_klines request
     Ok(vec![])
 }
@@ -273,32 +276,36 @@ pub async fn fetch_klines(
 pub fn connect_market_stream(
     config: Mt5Config,
     ticker_info: TickerInfo,
-    push_freq: PushFrequency,
+    _push_freq: PushFrequency,
 ) -> impl Stream<Item = Event> {
     stream::channel(100, move |mut output| {
         let config = config.clone();
-        
+
         async move {
             let exchange = super::Exchange::MetaTrader5;
             let mut orderbook = LocalDepthCache::default();
             let mut trades_buffer: Vec<Trade> = Vec::new();
             let mut reconnect_delay = Duration::from_secs(1);
-            
+
             loop {
                 log::info!("Connecting to MT5 server: {}", config.ws_url());
-                
+
                 match connect_and_stream(
                     &config,
                     ticker_info,
-                    push_freq,
                     &mut orderbook,
                     &mut trades_buffer,
                     &mut output,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {
                         // Clean disconnect
                         let _ = output
-                            .send(Event::Disconnected(exchange, "Connection closed".to_string()))
+                            .send(Event::Disconnected(
+                                exchange,
+                                "Connection closed".to_string(),
+                            ))
                             .await;
                     }
                     Err(e) => {
@@ -308,11 +315,11 @@ pub fn connect_market_stream(
                             .await;
                     }
                 }
-                
+
                 if !config.auto_reconnect {
                     break;
                 }
-                
+
                 // Exponential backoff for reconnect
                 tokio::time::sleep(reconnect_delay).await;
                 reconnect_delay = std::cmp::min(reconnect_delay * 2, Duration::from_secs(60));
@@ -325,74 +332,73 @@ pub fn connect_market_stream(
 async fn connect_and_stream(
     config: &Mt5Config,
     ticker_info: TickerInfo,
-    push_freq: PushFrequency,
-    orderbook: &mut LocalDepthCache,
-    trades_buffer: &mut Vec<Trade>,
+    _orderbook: &mut LocalDepthCache,
+    _trades_buffer: &mut [Trade],
     output: &mut mpsc::Sender<Event>,
 ) -> Result<(), AdapterError> {
     let exchange = super::Exchange::MetaTrader5;
-    
+
     // Build WebSocket URL
     let url = config.ws_url();
-    
+
     // Connect using the common connect function
     // Note: This uses the same connect module as other adapters
     let domain = config.server_addr.split(':').next().unwrap_or("localhost");
-    
-    let websocket = crate::connect::connect_ws(domain, &url)
+
+    let _websocket = crate::connect::connect_ws(domain, &url)
         .await
         .map_err(|e| AdapterError::WebsocketError(e.to_string()))?;
-    
+
     // Send connected event
     let _ = output.send(Event::Connected(exchange)).await;
-    
+
     // Authenticate
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    
+
     let signature = compute_signature(&config.api_key, timestamp, &config.api_secret);
-    
+
     let auth_msg = AuthMessage {
         msg_type: "auth",
         api_key: config.api_key.clone(),
         timestamp,
         signature,
     };
-    
-    let auth_json = serde_json::to_string(&auth_msg)
-        .map_err(|e| AdapterError::ParseError(e.to_string()))?;
-    
+
+    let _auth_json =
+        serde_json::to_string(&auth_msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
+
     log::debug!("Sending auth message");
-    
+
     // Send auth and subscribe messages
     // (In real implementation, would send via websocket)
-    
+
     // Subscribe to symbol
     let sub_msg = SubscribeMessage {
         msg_type: "subscribe",
         symbols: vec![ticker_info.ticker.to_string()],
         channels: vec!["depth".to_string(), "trades".to_string()],
     };
-    
-    let sub_json = serde_json::to_string(&sub_msg)
-        .map_err(|e| AdapterError::ParseError(e.to_string()))?;
-    
+
+    let _sub_json =
+        serde_json::to_string(&sub_msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
+
     log::debug!("Subscribed to {}", ticker_info.ticker);
-    
+
     // Main message loop would go here
     // For now, this is a placeholder that would process incoming WebSocket frames
-    
+
     // In a real implementation:
     // 1. Read frame from websocket
     // 2. Parse JSON message
     // 3. Convert to Trade/Depth/Kline
     // 4. Send via output channel
-    
+
     // Placeholder: simulate connection for now
     tokio::time::sleep(Duration::from_secs(config.timeout_secs)).await;
-    
+
     Ok(())
 }
 
@@ -400,15 +406,15 @@ async fn connect_and_stream(
 fn compute_signature(api_key: &str, timestamp: u64, secret: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     // Simple hash for placeholder (real implementation would use HMAC-SHA256)
     let message = format!("{}{}", api_key, timestamp);
     let combined = format!("{}{}", message, secret);
-    
+
     let mut hasher = DefaultHasher::new();
     combined.hash(&mut hasher);
     let hash = hasher.finish();
-    
+
     format!("{:016x}", hash)
 }
 
@@ -416,11 +422,11 @@ fn compute_signature(api_key: &str, timestamp: u64, secret: &str) -> String {
 fn parse_trade(msg: &str, ticker_info: TickerInfo) -> Result<Trade, AdapterError> {
     let mt5_trade: Mt5Trade =
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
-    
+
     let is_sell = mt5_trade.side == "sell";
-    let price = Price::from_f32(mt5_trade.price as f32)
-        .round_to_min_tick(ticker_info.min_ticksize);
-    
+    let price =
+        Price::from_f32(mt5_trade.price as f32).round_to_min_tick(ticker_info.min_ticksize);
+
     Ok(Trade {
         time: mt5_trade.time,
         is_sell,
@@ -430,10 +436,10 @@ fn parse_trade(msg: &str, ticker_info: TickerInfo) -> Result<Trade, AdapterError
 }
 
 /// Parse incoming depth message
-fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
+fn parse_depth(msg: &str, _ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
     let mt5_depth: Mt5Depth =
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
-    
+
     let bids = mt5_depth
         .bids
         .iter()
@@ -442,7 +448,7 @@ fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, Adapt
             qty: *qty as f32,
         })
         .collect();
-    
+
     let asks = mt5_depth
         .asks
         .iter()
@@ -451,7 +457,7 @@ fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, Adapt
             qty: *qty as f32,
         })
         .collect();
-    
+
     Ok(DepthPayload {
         last_update_id: mt5_depth.time,
         time: mt5_depth.time,
@@ -464,11 +470,11 @@ fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, Adapt
 fn parse_kline(msg: &str, ticker_info: TickerInfo) -> Result<Kline, AdapterError> {
     let mt5_kline: Mt5Kline =
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
-    
+
     // MT5 doesn't provide buy/sell volume split, so split 50/50
     let buy_volume = (mt5_kline.volume / 2.0) as f32;
     let sell_volume = (mt5_kline.volume / 2.0) as f32;
-    
+
     Ok(Kline::new(
         mt5_kline.time,
         mt5_kline.open as f32,
