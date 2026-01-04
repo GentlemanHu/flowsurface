@@ -12,6 +12,30 @@ pub struct Layouts {
     pub active_layout: Option<String>,
 }
 
+/// MT5 connection configuration for persistence
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Mt5Connection {
+    /// Display name for this connection
+    pub name: String,
+    /// Server address (host:port)
+    pub server_addr: String,
+    /// API key for authentication
+    pub api_key: String,
+    /// Whether to use TLS
+    pub use_tls: bool,
+    /// Auto reconnect on disconnect
+    pub auto_reconnect: bool,
+}
+
+/// MT5 settings - stores all MT5 connections
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Mt5Settings {
+    /// List of configured MT5 connections
+    pub connections: Vec<Mt5Connection>,
+    /// Active connection name (if any)
+    pub active_connection: Option<String>,
+}
+
 #[derive(Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct State {
@@ -25,6 +49,8 @@ pub struct State {
     pub audio_cfg: AudioStream,
     pub trade_fetch_enabled: bool,
     pub size_in_quote_ccy: exchange::SizeUnit,
+    /// MT5 connection settings
+    pub mt5_settings: Mt5Settings,
 }
 
 impl State {
@@ -50,6 +76,7 @@ impl State {
             audio_cfg,
             trade_fetch_enabled: exchange::fetcher::is_trade_fetch_enabled(),
             size_in_quote_ccy: volume_size_unit,
+            mt5_settings: Mt5Settings::default(),
         }
     }
 }

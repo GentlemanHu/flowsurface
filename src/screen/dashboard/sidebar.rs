@@ -189,9 +189,25 @@ impl Sidebar {
             )
         };
 
+        // MT5 connection button
+        let mt5_btn = {
+            let is_active = self.is_menu_active(sidebar::Menu::Mt5Config);
+
+            button_with_tooltip(
+                icon_text(Icon::Link, 14)
+                    .width(24)
+                    .align_x(Alignment::Center),
+                Message::ToggleSidebarMenu(Some(sidebar::Menu::Mt5Config)),
+                None,
+                tooltip_position,
+                move |theme, status| crate::style::button::transparent(theme, status, is_active),
+            )
+        };
+
         column![
             ticker_search_button,
             layout_modal_button,
+            mt5_btn,
             audio_btn,
             space::vertical(),
             settings_modal_button,

@@ -108,6 +108,7 @@ pub fn exchange_icon(exchange: Exchange) -> Icon {
         }
         Exchange::HyperliquidLinear | Exchange::HyperliquidSpot => Icon::HyperliquidLogo,
         Exchange::OkexLinear | Exchange::OkexInverse | Exchange::OkexSpot => Icon::OkexLogo,
+        Exchange::MetaTrader5 => Icon::Link,
     }
 }
 
