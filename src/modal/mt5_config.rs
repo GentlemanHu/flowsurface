@@ -3,6 +3,8 @@
 //! Allows users to configure MetaTrader 5 server connections
 //! including server address, API credentials, and connection options.
 
+#![allow(dead_code)] // TODO: Remove when fully integrated into main application
+
 use exchange::adapter::metatrader5::Mt5Config;
 use iced::{
     Alignment, Element, Length,
