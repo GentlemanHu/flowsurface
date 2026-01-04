@@ -47,6 +47,7 @@ pub enum Action {
 
 /// Connection test status
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Success variant will be used when connection test is implemented
 pub enum TestStatus {
     #[default]
     Idle,
