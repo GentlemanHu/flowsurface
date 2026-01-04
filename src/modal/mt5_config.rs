@@ -106,14 +106,6 @@ impl Mt5ConfigModal {
                 self.test_status = TestStatus::Testing;
                 Action::TestConnection(self.config.clone())
             }
-            Message::ConnectionTestResult(success, msg) => {
-                self.test_status = if success {
-                    TestStatus::Success(msg)
-                } else {
-                    TestStatus::Failed(msg)
-                };
-                Action::None
-            }
             Message::Save => {
                 if let Err(e) = self.config.validate() {
                     self.test_status = TestStatus::Failed(e);
