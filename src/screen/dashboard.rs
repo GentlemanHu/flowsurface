@@ -1372,6 +1372,11 @@ pub fn depth_subscription(
                 |cfg: &StreamConfig<TickerInfo>| okex::connect_market_stream(cfg.id, cfg.push_freq);
             Subscription::run_with(config, builder)
         }
+        Exchange::MetaTrader5 => {
+            // MT5 uses custom connection via Mt5Config, not standard subscription
+            // Return empty subscription - MT5 connections are managed separately
+            Subscription::none()
+        }
     }
 }
 
@@ -1404,6 +1409,10 @@ pub fn kline_subscription(
                 okex::connect_kline_stream(cfg.id.clone(), cfg.market_type)
             };
             Subscription::run_with(config, builder)
+        }
+        Exchange::MetaTrader5 => {
+            // MT5 uses custom connection via Mt5Config, not standard subscription
+            Subscription::none()
         }
     }
 }

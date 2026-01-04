@@ -6,10 +6,10 @@
 use exchange::adapter::metatrader5::Mt5Config;
 use iced::{
     Alignment, Element, Length,
-    widget::{button, column, container, row, text, text_input, toggler, Space},
+    widget::{button, column, container, row, text, text_input, toggler},
 };
 
-use crate::style::{self, Icon, icon_text};
+use crate::style;
 
 /// MT5 configuration modal messages
 #[derive(Debug, Clone)]
@@ -228,22 +228,27 @@ impl Mt5ConfigModal {
             .on_press(Message::Save)
             .style(button::primary);
 
-        let buttons = row![test_btn, Space::with_width(Length::Fill), cancel_btn, save_btn,]
-            .spacing(8)
-            .align_y(Alignment::Center);
+        let buttons = row![
+            test_btn,
+            iced::widget::Space::new().width(Length::Fill),
+            cancel_btn,
+            save_btn,
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center);
 
         let content = column![
             title,
-            Space::with_height(16),
+            iced::widget::Space::new().height(16),
             server_input,
             api_key_input,
             api_secret_input,
-            Space::with_height(8),
+            iced::widget::Space::new().height(8),
             tls_toggle,
             reconnect_toggle,
-            Space::with_height(8),
+            iced::widget::Space::new().height(8),
             test_status,
-            Space::with_height(16),
+            iced::widget::Space::new().height(16),
             buttons,
         ]
         .spacing(12)

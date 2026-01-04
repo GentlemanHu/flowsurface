@@ -7,6 +7,7 @@ pub mod theme_editor;
 use iced::widget::{center, container, mouse_area, opaque, stack};
 use iced::{Alignment, Color, Element, Length, padding};
 pub use layout_manager::LayoutManager;
+#[allow(unused_imports)]
 pub use mt5_config::Mt5ConfigModal;
 pub use pane::indicators;
 pub use pane::stream::{self, ModifierKind};

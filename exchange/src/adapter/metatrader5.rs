@@ -39,7 +39,7 @@ use std::{collections::HashMap, time::Duration};
 // ============================================================================
 
 /// MT5 server connection configuration
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Mt5Config {
     /// Server address (e.g., "192.168.1.100:9876" or "localhost:9876")
     pub server_addr: String,
