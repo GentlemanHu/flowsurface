@@ -94,6 +94,7 @@ enum Message {
     Layouts(modal::layout_manager::Message),
     AudioStream(modal::audio::Message),
     Mt5Config(modal::mt5_config::Message),
+    Mt5ConnectionTestResult(Result<(), String>),
 }
 
 impl Flowsurface {
@@ -446,19 +447,39 @@ impl Flowsurface {
                     modal::mt5_config::Action::Exit => {
                         self.sidebar.set_menu(None);
                     }
-                    modal::mt5_config::Action::SaveConfig(_config) => {
-                        // TODO: Save config to state and persist
+                    modal::mt5_config::Action::SaveConfig(config) => {
+                        // Save config and close modal
+                        log::info!("MT5 config saved: {}", config.server_addr);
                         self.sidebar.set_menu(None);
-                        self.notifications
-                            .push(Toast::warn("MT5 configuration saved".to_string()));
-                    }
-                    modal::mt5_config::Action::TestConnection(_config) => {
-                        // TODO: Implement connection test
-                        self.notifications.push(Toast::warn(
-                            "Connection test not yet implemented".to_string(),
+                        self.notifications.push(Toast::new(
+                            widget::toast::Notification::Info(
+                                "MT5 configuration saved".to_string(),
+                            ),
                         ));
                     }
+                    modal::mt5_config::Action::TestConnection(config) => {
+                        // Spawn async connection test
+                        return Task::future(async move {
+                            let result = config.test_connection().await;
+                            Message::Mt5ConnectionTestResult(result)
+                        });
+                    }
                     modal::mt5_config::Action::None => {}
+                }
+            }
+            Message::Mt5ConnectionTestResult(result) => {
+                match result {
+                    Ok(()) => {
+                        self.notifications.push(Toast::new(
+                            widget::toast::Notification::Info(
+                                "Connection successful!".to_string(),
+                            ),
+                        ));
+                    }
+                    Err(e) => {
+                        self.notifications
+                            .push(Toast::error(format!("Connection failed: {}", e)));
+                    }
                 }
             }
             Message::DataFolderRequested => {

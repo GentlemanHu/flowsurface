@@ -1,49 +1,49 @@
 //+------------------------------------------------------------------+
 //|                                           FlowsurfaceServer.mq5  |
 //|                                     Flowsurface MT5 Data Bridge  |
-//|                    WebSocket Server for Real-time Market Data    |
+//|                    WebSocket Client for Proxy Server Connection   |
 //+------------------------------------------------------------------+
 #property copyright   "Flowsurface"
-#property version     "1.00"
-#property description "MT5 WebSocket Server for Flowsurface Desktop App"
-#property description "Streams real-time trades, depth, and klines via WebSocket"
+#property version     "2.00"
+#property description "MT5 Data Bridge - Connects to Proxy Server"
+#property description "Streams real-time trades, depth, and klines"
 #property strict
 
 //--- Include modules
 #include "Include/JsonBuilder.mqh"
 #include "Include/Authentication.mqh"
-#include "Include/WebSocketServer.mqh"
+#include "Include/WebSocketClient.mqh"
 
 //+------------------------------------------------------------------+
 //| Input Parameters                                                  |
 //+------------------------------------------------------------------+
-input group "=== Server Settings ==="
-input int      InpServerPort     = 9876;            // WebSocket Server Port
-input int      InpHeartbeatSec   = 30;              // Heartbeat Interval (seconds)
-input int      InpSessionTimeout = 300;             // Session Timeout (seconds)
+input group "=== Proxy Server Settings ==="
+input string   InpProxyHost      = "localhost";       // Proxy Server Host
+input int      InpProxyPort      = 9876;              // Proxy Server Port
+input int      InpReconnectSec   = 5;                 // Reconnect Interval (seconds)
+input int      InpHeartbeatSec   = 30;                // Heartbeat Interval (seconds)
 
 input group "=== Security Settings ==="
-input string   InpApiKey         = "your_api_key";  // API Key
-input string   InpApiSecret      = "your_secret";   // API Secret (keep private!)
-input string   InpAllowedIPs     = "";              // Allowed IPs (comma-separated, empty=all)
-input int      InpTimestampTolerance = 30000;       // Timestamp Tolerance (ms)
+input string   InpApiKey         = "your_api_key";    // API Key
+input string   InpApiSecret      = "your_secret";     // API Secret
 
 input group "=== Data Settings ==="
-input string   InpSymbols        = "XAUUSD,EURUSD"; // Default Symbols
-input bool     InpEnableDepth    = true;            // Enable Depth Data
-input bool     InpEnableTrades   = true;            // Enable Trade Data
-input bool     InpEnableKlines   = true;            // Enable Kline Data
-input int      InpDepthLevels    = 10;              // Depth Levels to Send
+input string   InpSymbols        = "XAUUSD,EURUSD";   // Symbols to Stream
+input bool     InpEnableDepth    = true;              // Enable Depth Data
+input bool     InpEnableTrades   = true;              // Enable Trade Data
+input bool     InpEnableKlines   = true;              // Enable Kline Data
+input int      InpDepthLevels    = 10;                // Depth Levels to Send
 
 //+------------------------------------------------------------------+
 //| Global Variables                                                  |
 //+------------------------------------------------------------------+
-CWebSocketServer  g_server;
+CWebSocketClient  g_client;
 CAuthManager      g_auth;
-CClientSession    g_sessions[];
 CJsonBuilder      g_json;
 
+bool              g_authenticated = false;
 datetime          g_last_heartbeat = 0;
+datetime          g_last_reconnect_attempt = 0;
 string            g_subscribed_symbols[];
 MqlTick           g_last_ticks[];
 
@@ -53,29 +53,13 @@ MqlTick           g_last_ticks[];
 int OnInit()
 {
     Print("==============================================");
-    Print("Flowsurface MT5 Server v1.00 Starting...");
+    Print("Flowsurface MT5 Bridge v2.00 Starting...");
     Print("==============================================");
     
     //--- Initialize authentication
     g_auth.SetCredentials(InpApiKey, InpApiSecret);
-    g_auth.SetTimestampTolerance(InpTimestampTolerance);
     
-    //--- Parse allowed IPs
-    if(StringLen(InpAllowedIPs) > 0)
-    {
-        string ips[];
-        int count = StringSplit(InpAllowedIPs, ',', ips);
-        for(int i = 0; i < count; i++)
-        {
-            string ip = ips[i];
-            StringTrimLeft(ip);
-            StringTrimRight(ip);
-            if(StringLen(ip) > 0)
-                g_auth.AddAllowedIP(ip);
-        }
-    }
-    
-    //--- Parse default symbols
+    //--- Parse symbols
     ParseSymbols(InpSymbols);
     
     //--- Initialize tick storage
@@ -86,34 +70,22 @@ int OnInit()
     {
         for(int i = 0; i < ArraySize(g_subscribed_symbols); i++)
         {
-            if(!MarketBookAdd(g_subscribed_symbols[i]))
-            {
-                Print("Warning: Failed to subscribe to MarketBook for ", g_subscribed_symbols[i]);
-            }
-            else
-            {
+            if(MarketBookAdd(g_subscribed_symbols[i]))
                 Print("Subscribed to MarketBook: ", g_subscribed_symbols[i]);
-            }
+            else
+                Print("Warning: Failed to subscribe to MarketBook for ", g_subscribed_symbols[i]);
         }
     }
     
-    //--- Start WebSocket server
-    if(!g_server.Start(InpServerPort))
-    {
-        Print("ERROR: Failed to start WebSocket server!");
-        return INIT_FAILED;
-    }
-    
-    //--- Initialize sessions array
-    ArrayResize(g_sessions, 10);
-    
-    Print("Server started on port ", InpServerPort);
-    Print("API Key: ", StringSubstr(InpApiKey, 0, 4), "****");
+    Print("Proxy: ", InpProxyHost, ":", InpProxyPort);
     Print("Symbols: ", InpSymbols);
     Print("==============================================");
     
     //--- Set timer for periodic tasks
     EventSetMillisecondTimer(100);
+    
+    //--- Attempt initial connection
+    ConnectToProxy();
     
     return INIT_SUCCEEDED;
 }
@@ -131,10 +103,10 @@ void OnDeinit(const int reason)
         MarketBookRelease(g_subscribed_symbols[i]);
     }
     
-    //--- Stop server
-    g_server.Stop();
+    //--- Disconnect from proxy
+    g_client.Disconnect();
     
-    Print("Flowsurface MT5 Server stopped. Reason: ", reason);
+    Print("Flowsurface MT5 Bridge stopped. Reason: ", reason);
 }
 
 //+------------------------------------------------------------------+
@@ -142,18 +114,26 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-    //--- Check for heartbeat
-    if(TimeCurrent() - g_last_heartbeat >= InpHeartbeatSec)
+    //--- Check connection and reconnect if needed
+    if(!g_client.IsConnected())
+    {
+        if(TimeCurrent() - g_last_reconnect_attempt >= InpReconnectSec)
+        {
+            ConnectToProxy();
+            g_last_reconnect_attempt = TimeCurrent();
+        }
+        return;
+    }
+    
+    //--- Process incoming messages
+    ProcessIncomingMessages();
+    
+    //--- Send heartbeat
+    if(g_authenticated && TimeCurrent() - g_last_heartbeat >= InpHeartbeatSec)
     {
         SendHeartbeat();
         g_last_heartbeat = TimeCurrent();
     }
-    
-    //--- Check session timeouts
-    CheckSessionTimeouts();
-    
-    //--- Process pending messages (if any)
-    ProcessPendingMessages();
 }
 
 //+------------------------------------------------------------------+
@@ -162,7 +142,7 @@ void OnTimer()
 void OnTick()
 {
     if(!InpEnableTrades) return;
-    if(g_server.GetConnectedCount() == 0) return;
+    if(!g_client.IsConnected() || !g_authenticated) return;
     
     string symbol = Symbol();
     MqlTick tick;
@@ -179,14 +159,14 @@ void OnTick()
        g_last_ticks[idx].last == tick.last)
         return;
     
-    //--- Determine if buy or sell based on price movement
+    //--- Determine side
     string side = "unknown";
     if(tick.last > g_last_ticks[idx].last)
         side = "buy";
     else if(tick.last < g_last_ticks[idx].last)
         side = "sell";
     
-    //--- Build trade message
+    //--- Build and send trade message
     g_json.Reset();
     g_json.StartObject();
     g_json.AddKeyValue("type", "trade");
@@ -197,8 +177,7 @@ void OnTick()
     g_json.AddKeyValue("side", side);
     g_json.EndObject();
     
-    //--- Broadcast to authenticated clients
-    BroadcastToSubscribed(symbol, g_json.ToString());
+    g_client.SendText(g_json.ToString());
     
     //--- Store last tick
     g_last_ticks[idx] = tick;
@@ -210,7 +189,7 @@ void OnTick()
 void OnBookEvent(const string& symbol)
 {
     if(!InpEnableDepth) return;
-    if(g_server.GetConnectedCount() == 0) return;
+    if(!g_client.IsConnected() || !g_authenticated) return;
     
     MqlBookInfo book[];
     if(!MarketBookGet(symbol, book))
@@ -260,197 +239,107 @@ void OnBookEvent(const string& symbol)
     
     g_json.EndObject();
     
-    //--- Broadcast to subscribed clients
-    BroadcastToSubscribed(symbol, g_json.ToString());
+    g_client.SendText(g_json.ToString());
 }
 
 //+------------------------------------------------------------------+
-//| Process incoming WebSocket messages                               |
+//| Connect to proxy server                                           |
 //+------------------------------------------------------------------+
-void ProcessPendingMessages()
+void ConnectToProxy()
 {
-    for(int i = 0; i < ArraySize(g_sessions); i++)
+    Print("Connecting to proxy server: ", InpProxyHost, ":", InpProxyPort);
+    
+    if(!g_client.Connect(InpProxyHost, InpProxyPort, "/mt5"))
     {
-        if(!g_sessions[i].is_authenticated) continue;
-        
-        CWebSocketConnection* conn = g_server.GetClient(i);
-        if(conn == NULL || !conn.IsConnected()) continue;
-        
-        WebSocketFrame frame;
-        if(!conn.ReceiveFrame(frame)) continue;
-        
-        g_sessions[i].UpdateActivity();
-        
-        switch(frame.opcode)
-        {
-            case WS_OPCODE_TEXT:
-                HandleClientMessage(i, CharArrayToString(frame.payload));
-                break;
-                
-            case WS_OPCODE_PING:
-                // Send pong
-                uchar pong[];
-                ArrayCopy(pong, frame.payload);
-                conn.SendFrame(WS_OPCODE_PONG, pong);
-                break;
-                
-            case WS_OPCODE_CLOSE:
-                Print("Client ", i, " sent close frame");
-                DisconnectClient(i);
-                break;
-        }
+        Print("Failed to connect to proxy server");
+        return;
+    }
+    
+    Print("Connected to proxy server, sending authentication...");
+    g_authenticated = false;
+    
+    //--- Send authentication
+    long timestamp = g_auth.GetCurrentTimestampMs();
+    string signature = g_auth.ComputeSignature(InpApiKey, timestamp);
+    
+    g_json.Reset();
+    g_json.StartObject();
+    g_json.AddKeyValue("type", "auth");
+    g_json.AddKeyValue("api_key", InpApiKey);
+    g_json.AddKeyValue("timestamp", timestamp);
+    g_json.AddKeyValue("signature", signature);
+    g_json.EndObject();
+    
+    g_client.SendText(g_json.ToString());
+}
+
+//+------------------------------------------------------------------+
+//| Process incoming messages from proxy                              |
+//+------------------------------------------------------------------+
+void ProcessIncomingMessages()
+{
+    string message;
+    while(g_client.ReceiveText(message, 10))
+    {
+        HandleProxyMessage(message);
     }
 }
 
 //+------------------------------------------------------------------+
-//| Handle client message                                             |
+//| Handle message from proxy server                                  |
 //+------------------------------------------------------------------+
-void HandleClientMessage(int client_index, const string message)
+void HandleProxyMessage(const string message)
 {
     CJsonParser parser;
     if(!parser.Parse(message))
     {
-        Print("Failed to parse message from client ", client_index);
+        Print("Failed to parse message from proxy");
         return;
     }
     
     string msg_type;
     if(!parser.GetString("type", msg_type))
-    {
-        Print("Message missing 'type' field");
         return;
-    }
     
-    if(msg_type == "auth")
+    if(msg_type == "auth_response")
     {
-        HandleAuthMessage(client_index, parser);
+        bool success = false;
+        parser.GetBool("success", success);
+        
+        if(success)
+        {
+            g_authenticated = true;
+            Print("Authentication successful!");
+            
+            //--- Send available symbols
+            SendSymbolsInfo();
+        }
+        else
+        {
+            string error;
+            parser.GetString("error", error);
+            Print("Authentication failed: ", error);
+            g_client.Disconnect();
+        }
     }
-    else if(msg_type == "subscribe")
+    else if(msg_type == "heartbeat")
     {
-        HandleSubscribeMessage(client_index, parser);
-    }
-    else if(msg_type == "unsubscribe")
-    {
-        HandleUnsubscribeMessage(client_index, parser);
-    }
-    else if(msg_type == "get_symbols")
-    {
-        HandleGetSymbolsMessage(client_index);
+        // Heartbeat received, connection is alive
     }
     else if(msg_type == "get_klines")
     {
-        HandleGetKlinesMessage(client_index, parser);
+        HandleGetKlinesRequest(parser);
     }
     else if(msg_type == "ping")
     {
-        SendPong(client_index);
+        SendPong();
     }
 }
 
 //+------------------------------------------------------------------+
-//| Handle authentication message                                     |
+//| Send symbols info to proxy                                        |
 //+------------------------------------------------------------------+
-void HandleAuthMessage(int client_index, CJsonParser& parser)
-{
-    string api_key, signature;
-    long timestamp;
-    
-    parser.GetString("api_key", api_key);
-    parser.GetLong("timestamp", timestamp);
-    parser.GetString("signature", signature);
-    
-    string error_msg;
-    bool success = g_auth.ValidateAuth(api_key, timestamp, signature, 
-                                       g_sessions[client_index].client_ip, error_msg);
-    
-    //--- Build response
-    g_json.Reset();
-    g_json.StartObject();
-    g_json.AddKeyValue("type", "auth_response");
-    g_json.AddKeyValue("success", success);
-    
-    if(success)
-    {
-        g_sessions[client_index].is_authenticated = true;
-        g_sessions[client_index].auth_time = (long)TimeCurrent() * 1000;
-        g_json.AddKeyValue("server_time", g_auth.GetCurrentTimestampMs());
-        Print("Client ", client_index, " authenticated successfully");
-    }
-    else
-    {
-        g_json.AddKeyValue("error", error_msg);
-        Print("Client ", client_index, " auth failed: ", error_msg);
-    }
-    
-    g_json.EndObject();
-    
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
-}
-
-//+------------------------------------------------------------------+
-//| Handle subscribe message                                          |
-//+------------------------------------------------------------------+
-void HandleSubscribeMessage(int client_index, CJsonParser& parser)
-{
-    if(!g_sessions[client_index].is_authenticated)
-    {
-        SendError(client_index, "Not authenticated");
-        return;
-    }
-    
-    // Parse symbols and channels from message
-    // For simplicity, subscribe to all configured symbols
-    for(int i = 0; i < ArraySize(g_subscribed_symbols); i++)
-    {
-        g_sessions[client_index].AddSubscription(g_subscribed_symbols[i]);
-    }
-    
-    g_sessions[client_index].subscribe_depth = InpEnableDepth;
-    g_sessions[client_index].subscribe_trades = InpEnableTrades;
-    g_sessions[client_index].subscribe_klines = InpEnableKlines;
-    
-    //--- Send confirmation
-    g_json.Reset();
-    g_json.StartObject();
-    g_json.AddKeyValue("type", "subscribed");
-    g_json.AddKeyArray("symbols");
-    for(int i = 0; i < ArraySize(g_subscribed_symbols); i++)
-    {
-        g_json.AddString(g_subscribed_symbols[i]);
-    }
-    g_json.EndArray();
-    g_json.EndObject();
-    
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
-    
-    Print("Client ", client_index, " subscribed to ", ArraySize(g_subscribed_symbols), " symbols");
-}
-
-//+------------------------------------------------------------------+
-//| Handle unsubscribe message                                        |
-//+------------------------------------------------------------------+
-void HandleUnsubscribeMessage(int client_index, CJsonParser& parser)
-{
-    ArrayResize(g_sessions[client_index].subscribed_symbols, 0);
-    
-    g_json.Reset();
-    g_json.StartObject();
-    g_json.AddKeyValue("type", "unsubscribed");
-    g_json.EndObject();
-    
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
-}
-
-//+------------------------------------------------------------------+
-//| Handle get symbols request                                        |
-//+------------------------------------------------------------------+
-void HandleGetSymbolsMessage(int client_index)
+void SendSymbolsInfo()
 {
     g_json.Reset();
     g_json.StartObject();
@@ -477,27 +366,28 @@ void HandleGetSymbolsMessage(int client_index)
     g_json.EndArray();
     g_json.EndObject();
     
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
+    g_client.SendText(g_json.ToString());
+    Print("Sent symbols info: ", ArraySize(g_subscribed_symbols), " symbols");
 }
 
 //+------------------------------------------------------------------+
 //| Handle get klines request                                         |
 //+------------------------------------------------------------------+
-void HandleGetKlinesMessage(int client_index, CJsonParser& parser)
+void HandleGetKlinesRequest(CJsonParser& parser)
 {
     string symbol;
     string timeframe_str;
     long start_time = 0;
     long end_time = 0;
     long limit = 500;
+    double request_id = 0;
     
     parser.GetString("symbol", symbol);
     parser.GetString("timeframe", timeframe_str);
     parser.GetLong("start", start_time);
     parser.GetLong("end", end_time);
     parser.GetLong("limit", limit);
+    parser.GetDouble("request_id", request_id);
     
     ENUM_TIMEFRAMES tf = StringToTimeframe(timeframe_str);
     if(tf == PERIOD_CURRENT)
@@ -518,7 +408,14 @@ void HandleGetKlinesMessage(int client_index, CJsonParser& parser)
     
     if(count <= 0)
     {
-        SendError(client_index, "Failed to get klines for " + symbol);
+        g_json.Reset();
+        g_json.StartObject();
+        g_json.AddKeyValue("type", "error");
+        g_json.AddKeyValue("message", "Failed to get klines for " + symbol);
+        if(request_id > 0)
+            g_json.AddKeyValue("request_id", request_id, 0);
+        g_json.EndObject();
+        g_client.SendText(g_json.ToString());
         return;
     }
     
@@ -528,6 +425,8 @@ void HandleGetKlinesMessage(int client_index, CJsonParser& parser)
     g_json.AddKeyValue("type", "klines");
     g_json.AddKeyValue("symbol", symbol);
     g_json.AddKeyValue("timeframe", timeframe_str);
+    if(request_id > 0)
+        g_json.AddKeyValue("request_id", request_id, 0);
     g_json.AddKeyArray("data");
     
     int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
@@ -548,47 +447,27 @@ void HandleGetKlinesMessage(int client_index, CJsonParser& parser)
     g_json.EndArray();
     g_json.EndObject();
     
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
+    g_client.SendText(g_json.ToString());
 }
 
 //+------------------------------------------------------------------+
-//| Broadcast message to clients subscribed to symbol                 |
-//+------------------------------------------------------------------+
-void BroadcastToSubscribed(const string symbol, const string message)
-{
-    for(int i = 0; i < ArraySize(g_sessions); i++)
-    {
-        if(!g_sessions[i].is_authenticated) continue;
-        if(!g_sessions[i].IsSubscribed(symbol)) continue;
-        
-        CWebSocketConnection* conn = g_server.GetClient(i);
-        if(conn != NULL && conn.IsConnected())
-        {
-            conn.SendText(message);
-        }
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Send heartbeat to all clients                                     |
+//| Send heartbeat to proxy                                           |
 //+------------------------------------------------------------------+
 void SendHeartbeat()
 {
     g_json.Reset();
     g_json.StartObject();
-    g_json.AddKeyValue("type", "heartbeat");
+    g_json.AddKeyValue("type", "ping");
     g_json.AddKeyValue("time", g_auth.GetCurrentTimestampMs());
     g_json.EndObject();
     
-    g_server.Broadcast(g_json.ToString());
+    g_client.SendText(g_json.ToString());
 }
 
 //+------------------------------------------------------------------+
 //| Send pong response                                                |
 //+------------------------------------------------------------------+
-void SendPong(int client_index)
+void SendPong()
 {
     g_json.Reset();
     g_json.StartObject();
@@ -596,51 +475,7 @@ void SendPong(int client_index)
     g_json.AddKeyValue("time", g_auth.GetCurrentTimestampMs());
     g_json.EndObject();
     
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
-}
-
-//+------------------------------------------------------------------+
-//| Send error response                                               |
-//+------------------------------------------------------------------+
-void SendError(int client_index, const string error_msg)
-{
-    g_json.Reset();
-    g_json.StartObject();
-    g_json.AddKeyValue("type", "error");
-    g_json.AddKeyValue("message", error_msg);
-    g_json.EndObject();
-    
-    CWebSocketConnection* conn = g_server.GetClient(client_index);
-    if(conn != NULL)
-        conn.SendText(g_json.ToString());
-}
-
-//+------------------------------------------------------------------+
-//| Check and disconnect expired sessions                             |
-//+------------------------------------------------------------------+
-void CheckSessionTimeouts()
-{
-    long timeout_ms = InpSessionTimeout * 1000;
-    
-    for(int i = 0; i < ArraySize(g_sessions); i++)
-    {
-        if(g_sessions[i].is_authenticated && g_sessions[i].IsExpired(timeout_ms))
-        {
-            Print("Session ", i, " timed out");
-            DisconnectClient(i);
-        }
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Disconnect client                                                 |
-//+------------------------------------------------------------------+
-void DisconnectClient(int client_index)
-{
-    g_server.RemoveClient(client_index);
-    g_sessions[client_index].Reset();
+    g_client.SendText(g_json.ToString());
 }
 
 //+------------------------------------------------------------------+

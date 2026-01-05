@@ -156,14 +156,14 @@ private:
         return result;
     }
     
-    string SimpleHash(const string input)
+    string SimpleHash(const string str)
     {
         // Simple hash for fallback (not cryptographically secure)
         ulong hash = 5381;
-        int len = StringLen(input);
+        int len = StringLen(str);
         for(int i = 0; i < len; i++)
         {
-            hash = ((hash << 5) + hash) + StringGetCharacter(input, i);
+            hash = ((hash << 5) + hash) + StringGetCharacter(str, i);
         }
         return StringFormat("%016llX", hash);
     }

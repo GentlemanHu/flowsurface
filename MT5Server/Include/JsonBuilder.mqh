@@ -145,9 +145,9 @@ private:
         }
     }
     
-    string EscapeString(const string input)
+    string EscapeString(const string str)
     {
-        string result = input;
+        string result = str;
         StringReplace(result, "\\", "\\\\");
         StringReplace(result, "\"", "\\\"");
         StringReplace(result, "\n", "\\n");
