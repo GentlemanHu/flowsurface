@@ -22,18 +22,18 @@
 //! - Optional TLS encryption
 //! - Timestamp-based replay attack prevention
 
-use super::{AdapterError, Event};
+use super::{AdapterError, Event, StreamKind};
 use crate::{
-    depth::{DepthPayload, LocalDepthCache},
+    depth::{Depth, DepthPayload, DepthUpdate, LocalDepthCache},
     Kline, Price, PushFrequency, Ticker, TickerInfo, TickerStats, Timeframe, Trade,
 };
 
 use iced_futures::{
-    futures::{channel::mpsc, SinkExt, Stream, StreamExt},
+    futures::{channel::mpsc, SinkExt, Stream},
     stream,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 // ============================================================================
 // Configuration Types
@@ -202,15 +202,11 @@ struct ServerMessage {
     success: Option<bool>,
     #[serde(default)]
     error: Option<String>,
-    #[serde(default)]
-    symbol: Option<String>,
 }
 
 /// Incoming trade data
 #[derive(Debug, Deserialize)]
 struct Mt5Trade {
-    #[allow(dead_code)]
-    symbol: String,
     time: u64,
     price: f64,
     volume: f64,
@@ -220,8 +216,6 @@ struct Mt5Trade {
 /// Incoming depth data
 #[derive(Debug, Deserialize)]
 struct Mt5Depth {
-    #[allow(dead_code)]
-    symbol: String,
     time: u64,
     bids: Vec<[f64; 2]>,
     asks: Vec<[f64; 2]>,
@@ -252,10 +246,6 @@ struct Mt5SymbolInfo {
 /// Historical klines response
 #[derive(Debug, Deserialize)]
 struct KlinesResponse {
-    #[allow(dead_code)]
-    symbol: String,
-    #[allow(dead_code)]
-    timeframe: String,
     data: Vec<Mt5Kline>,
 }
 
@@ -309,7 +299,7 @@ pub async fn fetch_ticksize(
             serde_json::from_str(&text).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
         if resp.msg_type == "auth_response" && resp.success != Some(true) {
-            return Err(AdapterError::AuthError(
+            return Err(AdapterError::WebsocketError(
                 resp.error.unwrap_or_else(|| "Auth failed".to_string()),
             ));
         }
@@ -399,7 +389,7 @@ pub async fn fetch_klines(
             serde_json::from_str(&text).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
         if resp.msg_type == "auth_response" && resp.success != Some(true) {
-            return Err(AdapterError::AuthError(
+            return Err(AdapterError::WebsocketError(
                 resp.error.unwrap_or_else(|| "Auth failed".to_string()),
             ));
         }
@@ -556,8 +546,8 @@ async fn connect_and_stream(
         let msg = msg_result.map_err(|e| AdapterError::WebsocketError(e.to_string()))?;
 
         if let Message::Text(text) = msg {
-            let server_msg: ServerMessage = serde_json::from_str(&text)
-                .map_err(|e| AdapterError::ParseError(e.to_string()))?;
+            let server_msg: ServerMessage =
+                serde_json::from_str(&text).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
             if server_msg.msg_type == "auth_response" {
                 if server_msg.success == Some(true) {
@@ -565,7 +555,7 @@ async fn connect_and_stream(
                     log::info!("MT5 authenticated successfully");
                     break;
                 } else {
-                    return Err(AdapterError::AuthError(
+                    return Err(AdapterError::WebsocketError(
                         server_msg
                             .error
                             .unwrap_or_else(|| "Auth failed".to_string()),
@@ -576,7 +566,7 @@ async fn connect_and_stream(
     }
 
     if !authenticated {
-        return Err(AdapterError::AuthError(
+        return Err(AdapterError::WebsocketError(
             "No auth response received".to_string(),
         ));
     }
@@ -597,6 +587,9 @@ async fn connect_and_stream(
 
     log::debug!("Subscribed to {}", ticker_info.ticker);
 
+    // Create StreamKind for events
+    let stream_kind = StreamKind::new(ticker_info, super::StreamType::DepthAndTrades);
+
     // Main message loop
     while let Some(msg_result) = ws.next().await {
         let msg = msg_result.map_err(|e| AdapterError::WebsocketError(e.to_string()))?;
@@ -608,36 +601,27 @@ async fn connect_and_stream(
                     match server_msg.msg_type.as_str() {
                         "trade" => {
                             if let Ok(trade) = parse_trade(&text, ticker_info) {
-                                trades_buffer.push(trade.clone());
-
-                                // Emit trade event
-                                let _ = output
-                                    .send(Event::Trade(exchange, ticker_info, trade))
-                                    .await;
+                                trades_buffer.push(trade);
                             }
                         }
                         "depth" => {
-                            if let Ok(depth) = parse_depth(&text, ticker_info) {
+                            if let Ok(depth_payload) = parse_depth(&text, ticker_info) {
                                 // Update local depth cache
-                                orderbook.update_depth_cache(
-                                    depth.bids.clone(),
-                                    depth.asks.clone(),
-                                    depth.last_update_id,
+                                orderbook.update(
+                                    DepthUpdate::Snapshot(depth_payload),
                                     ticker_info.min_ticksize,
                                 );
 
-                                // Emit depth update event
-                                let best_bid = depth.bids.first().map(|o| o.price);
-                                let best_ask = depth.asks.first().map(|o| o.price);
+                                // Emit depth received event
+                                let trades: Box<[Trade]> =
+                                    std::mem::take(trades_buffer).into_boxed_slice();
 
                                 let _ = output
                                     .send(Event::DepthReceived(
-                                        exchange,
-                                        ticker_info,
-                                        std::mem::take(trades_buffer),
-                                        orderbook.depth_update(ticker_info.min_ticksize),
-                                        best_bid,
-                                        best_ask,
+                                        stream_kind,
+                                        orderbook.time,
+                                        Arc::clone(&orderbook.depth),
+                                        trades,
                                     ))
                                     .await;
                             }
@@ -712,7 +696,7 @@ fn parse_trade(msg: &str, ticker_info: TickerInfo) -> Result<Trade, AdapterError
 }
 
 /// Parse incoming depth message
-fn parse_depth(msg: &str, _ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
+fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
     let mt5_depth: Mt5Depth =
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
