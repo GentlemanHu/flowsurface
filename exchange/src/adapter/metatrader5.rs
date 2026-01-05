@@ -22,9 +22,9 @@
 //! - Optional TLS encryption
 //! - Timestamp-based replay attack prevention
 
-use super::{AdapterError, Event, StreamKind};
+use super::{AdapterError, Event, StreamKind, StreamTicksize};
 use crate::{
-    depth::{Depth, DepthPayload, DepthUpdate, LocalDepthCache},
+    depth::{DepthPayload, DepthUpdate, LocalDepthCache},
     Kline, Price, PushFrequency, Ticker, TickerInfo, TickerStats, Timeframe, Trade,
 };
 
@@ -588,7 +588,11 @@ async fn connect_and_stream(
     log::debug!("Subscribed to {}", ticker_info.ticker);
 
     // Create StreamKind for events
-    let stream_kind = StreamKind::new(ticker_info, super::StreamType::DepthAndTrades);
+    let stream_kind = StreamKind::DepthAndTrades {
+        ticker_info,
+        depth_aggr: StreamTicksize::Client,
+        push_freq: PushFrequency::Realtime,
+    };
 
     // Main message loop
     while let Some(msg_result) = ws.next().await {
@@ -696,7 +700,7 @@ fn parse_trade(msg: &str, ticker_info: TickerInfo) -> Result<Trade, AdapterError
 }
 
 /// Parse incoming depth message
-fn parse_depth(msg: &str, ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
+fn parse_depth(msg: &str, _ticker_info: TickerInfo) -> Result<DepthPayload, AdapterError> {
     let mt5_depth: Mt5Depth =
         serde_json::from_str(msg).map_err(|e| AdapterError::ParseError(e.to_string()))?;
 
