@@ -243,16 +243,45 @@ private:
             return false;
         }
         
+        
         Print("WebSocketClient: Request sent. Waiting for response (10s timeout)...");
         
-        // Wait a bit to ensure server has processed the request
-        Sleep(100);
+        // Polling loop for response
+        int attempts = 0;
+        int max_attempts = 100; // 100 * 100ms = 10 seconds
+        
+        while(attempts < max_attempts)
+        {
+            if(!IsConnected())
+            {
+                 Print("WebSocketClient: Disconnected while waiting for handshake");
+                 return false;
+            }
+            
+            uint readable = SocketIsReadable(m_socket);
+            if(readable > 0)
+            {
+                Print("WebSocketClient: Data available: ", readable, " bytes after ", attempts*100, "ms");
+                break;
+            }
+            
+            Sleep(100);
+            attempts++;
+            
+            if(attempts % 10 == 0) // Print every second
+                Print("WebSocketClient: Waiting... ", attempts/10, "s");
+        }
+        
+        if(attempts >= max_attempts)
+        {
+            Print("WebSocketClient: Handshake timeout - No data received");
+            return false;
+        }
         
         // Read response
         uchar response[];
         ArrayResize(response, 4096);
-        // Increase timeout to 10 seconds
-        int received = SocketRead(m_socket, response, 4096, 10000);
+        int received = SocketRead(m_socket, response, 4096, 1000); // 1s timeout for reading available data
         
         if(received < 0)
         {
@@ -264,7 +293,7 @@ private:
         
         if(received == 0)
         {
-            Print("WebSocketClient: No handshake response (Timeout or Connection Closed)");
+            Print("WebSocketClient: No handshake response read (unexpected)");
             return false;
         }
         
