@@ -224,14 +224,15 @@ private:
         
         Print("WebSocketClient: Request Header:\n", request);
         
+        // Use a simpler approach to ensure no null terminator issues
         uchar req_bytes[];
-        int len = StringToCharArray(request, req_bytes);
-        // StringToCharArray includes null terminator if count not specified. 
-        // We want to send exact bytes of the string, excluding null terminator if it was added.
-        // Actually StringToCharArray copies the null if count=-1. 
-        // We should send StringLen(request) bytes.
-        
-        int send_len = StringLen(request);
+        StringToCharArray(request, req_bytes);
+        // Resize to actual length of string to remove any potential null terminator added by StringToCharArray
+        int str_len = StringLen(request);
+        if(ArraySize(req_bytes) > str_len)
+            ArrayResize(req_bytes, str_len);
+            
+        int send_len = ArraySize(req_bytes);
         Print("WebSocketClient: Sending ", send_len, " bytes...");
         
         if(!SocketSend(m_socket, req_bytes, send_len))
@@ -243,6 +244,9 @@ private:
         }
         
         Print("WebSocketClient: Request sent. Waiting for response (10s timeout)...");
+        
+        // Wait a bit to ensure server has processed the request
+        Sleep(100);
         
         // Read response
         uchar response[];
