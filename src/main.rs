@@ -451,11 +451,10 @@ impl Flowsurface {
                         // Save config and close modal
                         log::info!("MT5 config saved: {}", config.server_addr);
                         self.sidebar.set_menu(None);
-                        self.notifications.push(Toast::new(
-                            widget::toast::Notification::Info(
+                        self.notifications
+                            .push(Toast::new(widget::toast::Notification::Info(
                                 "MT5 configuration saved".to_string(),
-                            ),
-                        ));
+                            )));
                     }
                     modal::mt5_config::Action::TestConnection(config) => {
                         // Spawn async connection test
@@ -467,21 +466,18 @@ impl Flowsurface {
                     modal::mt5_config::Action::None => {}
                 }
             }
-            Message::Mt5ConnectionTestResult(result) => {
-                match result {
-                    Ok(()) => {
-                        self.notifications.push(Toast::new(
-                            widget::toast::Notification::Info(
-                                "Connection successful!".to_string(),
-                            ),
-                        ));
-                    }
-                    Err(e) => {
-                        self.notifications
-                            .push(Toast::error(format!("Connection failed: {}", e)));
-                    }
+            Message::Mt5ConnectionTestResult(result) => match result {
+                Ok(()) => {
+                    self.notifications
+                        .push(Toast::new(widget::toast::Notification::Info(
+                            "Connection successful!".to_string(),
+                        )));
                 }
-            }
+                Err(e) => {
+                    self.notifications
+                        .push(Toast::error(format!("Connection failed: {}", e)));
+                }
+            },
             Message::DataFolderRequested => {
                 if let Err(err) = data::open_data_folder() {
                     self.notifications
