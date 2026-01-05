@@ -44,18 +44,27 @@ public:
         m_port = port;
         m_path = path;
         
+        Print("WebSocketClient: Attempting connection to ", m_host, ":", m_port, m_path);
+        
         // Create socket
         m_socket = SocketCreate();
         if(m_socket == INVALID_HANDLE)
         {
-            Print("WebSocketClient: SocketCreate failed - ", GetLastError());
+            int err = GetLastError();
+            Print("WebSocketClient: SocketCreate failed - Error: ", err);
+            PrintSocketErrorHelp(err);
             return false;
         }
         
+        Print("WebSocketClient: Socket created successfully, handle=", m_socket);
+        
         // Connect to server
+        Print("WebSocketClient: Calling SocketConnect(", m_host, ", ", port, ", 5000ms timeout)...");
         if(!SocketConnect(m_socket, m_host, (uint)m_port, 5000))
         {
-            Print("WebSocketClient: SocketConnect failed - ", GetLastError());
+            int err = GetLastError();
+            Print("WebSocketClient: SocketConnect failed - Error: ", err);
+            PrintSocketErrorHelp(err);
             SocketClose(m_socket);
             m_socket = INVALID_HANDLE;
             return false;
@@ -344,5 +353,53 @@ private:
         }
         
         return result;
+    }
+    
+    //--- Print helpful error messages for socket errors
+    void PrintSocketErrorHelp(int err)
+    {
+        switch(err)
+        {
+            case 4014:
+                Print(">>> ERR_NETSOCKET_CANNOT_CONNECT: Cannot establish connection.");
+                Print(">>> Possible causes:");
+                Print(">>>   1. Server not running on the specified host:port");
+                Print(">>>   2. Firewall blocking the connection");
+                Print(">>>   3. Incorrect host/port configuration");
+                Print(">>>   4. Check: Tools -> Options -> Expert Advisors -> Allow WebRequest for listed URL");
+                Print(">>>   5. Try adding 'http://127.0.0.1' or 'http://localhost' to allowed URLs");
+                break;
+            case 4015:
+                Print(">>> ERR_NETSOCKET_IO_ERROR: Socket I/O error");
+                break;
+            case 4016:
+                Print(">>> ERR_NETSOCKET_HANDSHAKE_FAILED: Secure connection handshake failed");
+                break;
+            case 4017:
+                Print(">>> ERR_NETSOCKET_NO_CERTIFICATE: No certificate");
+                break;
+            case 5273:
+                Print(">>> ERR_NETSOCKET_INVALIDHANDLE: Invalid socket handle");
+                break;
+            case 5274:
+                Print(">>> ERR_NETSOCKET_TOO_MANY_OPENED: Too many sockets opened");
+                break;
+            case 5275:
+                Print(">>> ERR_NETSOCKET_CANNOT_CONNECT: Cannot connect to server");
+                break;
+            case 5276:
+                Print(">>> ERR_NETSOCKET_IO_ERROR: Socket send/receive failed");
+                break;
+            case 5277:
+                Print(">>> ERR_NETSOCKET_URL_NOT_ALLOWED: URL not allowed!");
+                Print(">>> GO TO: Tools -> Options -> Expert Advisors");
+                Print(">>> ADD the proxy server URL to 'Allow WebRequest for listed URL'");
+                Print(">>> Example: Add 'http://127.0.0.1' or 'http://127.0.0.1:9876'");
+                break;
+            default:
+                Print(">>> Unknown socket error: ", err);
+                Print(">>> Check MQL5 documentation for error details");
+                break;
+        }
     }
 };
