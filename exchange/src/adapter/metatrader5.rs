@@ -314,18 +314,18 @@ pub async fn fetch_ticksize(
     // Get symbols response
     let mut result = HashMap::new();
 
-    if let Some(Ok(Message::Text(text))) = ws.next().await {
-        if let Ok(resp) = serde_json::from_str::<SymbolsResponse>(&text) {
-            for sym_info in resp.data {
-                let ticker = Ticker::new(&sym_info.symbol, super::Exchange::MetaTrader5);
-                let info = TickerInfo::new(
-                    ticker,
-                    sym_info.tick_size as f32,
-                    sym_info.min_lot as f32,
-                    Some(sym_info.contract_size as f32),
-                );
-                result.insert(ticker, Some(info));
-            }
+    if let Some(Ok(Message::Text(text))) = ws.next().await
+        && let Ok(resp) = serde_json::from_str::<SymbolsResponse>(&text)
+    {
+        for sym_info in resp.data {
+            let ticker = Ticker::new(&sym_info.symbol, super::Exchange::MetaTrader5);
+            let info = TickerInfo::new(
+                ticker,
+                sym_info.tick_size as f32,
+                sym_info.min_lot as f32,
+                Some(sym_info.contract_size as f32),
+            );
+            result.insert(ticker, Some(info));
         }
     }
 
@@ -415,22 +415,22 @@ pub async fn fetch_klines(
     // Get klines response
     let mut klines = Vec::new();
 
-    if let Some(Ok(Message::Text(text))) = ws.next().await {
-        if let Ok(resp) = serde_json::from_str::<KlinesResponse>(&text) {
-            for k in resp.data {
-                let buy_volume = (k.volume / 2.0) as f32;
-                let sell_volume = (k.volume / 2.0) as f32;
+    if let Some(Ok(Message::Text(text))) = ws.next().await
+        && let Ok(resp) = serde_json::from_str::<KlinesResponse>(&text)
+    {
+        for k in resp.data {
+            let buy_volume = (k.volume / 2.0) as f32;
+            let sell_volume = (k.volume / 2.0) as f32;
 
-                klines.push(Kline::new(
-                    k.time,
-                    k.open as f32,
-                    k.high as f32,
-                    k.low as f32,
-                    k.close as f32,
-                    (buy_volume, sell_volume),
-                    ticker_info.min_ticksize,
-                ));
-            }
+            klines.push(Kline::new(
+                k.time,
+                k.open as f32,
+                k.high as f32,
+                k.low as f32,
+                k.close as f32,
+                (buy_volume, sell_volume),
+                ticker_info.min_ticksize,
+            ));
         }
     }
 
