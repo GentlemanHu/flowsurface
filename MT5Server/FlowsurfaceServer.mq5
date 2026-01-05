@@ -18,7 +18,7 @@
 //| Input Parameters                                                  |
 //+------------------------------------------------------------------+
 input group "=== Proxy Server Settings ==="
-input string   InpProxyHost      = "localhost";       // Proxy Server Host
+input string   InpProxyHost      = "127.0.0.1";       // Proxy Server Host
 input int      InpProxyPort      = 9876;              // Proxy Server Port
 input int      InpReconnectSec   = 5;                 // Reconnect Interval (seconds)
 input int      InpHeartbeatSec   = 30;                // Heartbeat Interval (seconds)
