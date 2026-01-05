@@ -591,7 +591,7 @@ async fn connect_and_stream(
     let stream_kind = StreamKind::DepthAndTrades {
         ticker_info,
         depth_aggr: StreamTicksize::Client,
-        push_freq: PushFrequency::Realtime,
+        push_freq: PushFrequency::ServerDefault,
     };
 
     // Main message loop
