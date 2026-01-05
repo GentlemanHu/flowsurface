@@ -207,8 +207,11 @@ private:
     //--- WebSocket handshake
     bool DoHandshake()
     {
+        Print("WebSocketClient: Starting handshake...");
+        
         // Generate random key
         string ws_key = GenerateWebSocketKey();
+        Print("WebSocketClient: Generated Key: ", ws_key);
         
         // Build HTTP upgrade request
         string request = "GET " + m_path + " HTTP/1.1\r\n";
@@ -219,32 +222,55 @@ private:
         request += "Sec-WebSocket-Version: 13\r\n";
         request += "\r\n";
         
-        uchar req_bytes[];
-        StringToCharArray(request, req_bytes, 0, StringLen(request));
+        Print("WebSocketClient: Request Header:\n", request);
         
-        if(!SocketSend(m_socket, req_bytes, StringLen(request)))
+        uchar req_bytes[];
+        int len = StringToCharArray(request, req_bytes);
+        // StringToCharArray includes null terminator if count not specified. 
+        // We want to send exact bytes of the string, excluding null terminator if it was added.
+        // Actually StringToCharArray copies the null if count=-1. 
+        // We should send StringLen(request) bytes.
+        
+        int send_len = StringLen(request);
+        Print("WebSocketClient: Sending ", send_len, " bytes...");
+        
+        if(!SocketSend(m_socket, req_bytes, send_len))
         {
-            Print("WebSocketClient: Failed to send handshake request");
+            int err = GetLastError();
+            Print("WebSocketClient: Failed to send handshake request - Error: ", err);
+            PrintSocketErrorHelp(err);
             return false;
         }
         
+        Print("WebSocketClient: Request sent. Waiting for response (10s timeout)...");
+        
         // Read response
         uchar response[];
-        ArrayResize(response, 1024);
-        int received = SocketRead(m_socket, response, 1024, 5000);
+        ArrayResize(response, 4096);
+        // Increase timeout to 10 seconds
+        int received = SocketRead(m_socket, response, 4096, 10000);
         
-        if(received <= 0)
+        if(received < 0)
         {
-            Print("WebSocketClient: No handshake response");
+             int err = GetLastError();
+             Print("WebSocketClient: SocketRead error - Code: ", err);
+             PrintSocketErrorHelp(err);
+             return false;
+        }
+        
+        if(received == 0)
+        {
+            Print("WebSocketClient: No handshake response (Timeout or Connection Closed)");
             return false;
         }
         
         string response_str = CharArrayToString(response, 0, received);
+        Print("WebSocketClient: Received response (", received, " bytes):\n", response_str);
         
         // Check for 101 Switching Protocols
         if(StringFind(response_str, "101") < 0)
         {
-            Print("WebSocketClient: Invalid handshake response: ", StringSubstr(response_str, 0, 50));
+            Print("WebSocketClient: Invalid handshake response");
             return false;
         }
         
