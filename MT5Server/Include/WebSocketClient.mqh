@@ -110,6 +110,8 @@ public:
     
     void Disconnect()
     {
+        Print("WebSocketClient: Disconnect() called, socket=", m_socket, " connected=", m_connected, " handshake=", m_handshake_done);
+        
         if(m_socket != INVALID_HANDLE)
         {
             // Send close frame
@@ -126,6 +128,7 @@ public:
         }
         m_connected = false;
         m_handshake_done = false;
+        m_connecting = false;  // Also reset connecting flag
     }
     
     bool IsConnected() { return m_connected && m_handshake_done; }
@@ -269,31 +272,46 @@ private:
         Print("WebSocketClient: Request sent. Waiting for response...");
         
         // Give server time to process and respond
-        Sleep(500);
+        Sleep(200);
         
         // Check if socket is still valid
+        Print("WebSocketClient: Checking socket handle: ", m_socket, " connected: ", m_connected);
         if(m_socket == INVALID_HANDLE)
         {
             Print("WebSocketClient: Socket became invalid before reading");
             return false;
         }
         
-        // Check readable bytes
-        uint readable = SocketIsReadable(m_socket);
-        Print("WebSocketClient: SocketIsReadable returned: ", readable);
+        // Check readable bytes multiple times
+        uint readable = 0;
+        for(int retry = 0; retry < 10; retry++)
+        {
+            readable = SocketIsReadable(m_socket);
+            Print("WebSocketClient: SocketIsReadable (try ", retry, "): ", readable, " bytes");
+            if(readable > 0) break;
+            Sleep(100);
+        }
         
-        // Read response with reasonable timeout
+        if(readable == 0)
+        {
+            Print("WebSocketClient: No data available after waiting");
+            return false;
+        }
+        
+        // Read exactly what's available, with short timeout
         uchar response[];
-        ArrayResize(response, 4096);
-        Print("WebSocketClient: Calling SocketRead with 10s timeout...");
-        int received = SocketRead(m_socket, response, 4096, 10000);
+        uint read_size = MathMin(readable, 4096);
+        ArrayResize(response, (int)read_size);
+        
+        Print("WebSocketClient: Calling SocketRead for ", read_size, " bytes with 2s timeout... socket=", m_socket);
+        int received = SocketRead(m_socket, response, read_size, 2000);
         
         Print("WebSocketClient: SocketRead returned: ", received);
         
         if(received < 0)
         {
              int err = GetLastError();
-             Print("WebSocketClient: SocketRead error - Code: ", err);
+             Print("WebSocketClient: SocketRead error - Code: ", err, " socket=", m_socket);
              PrintSocketErrorHelp(err);
              return false;
         }
