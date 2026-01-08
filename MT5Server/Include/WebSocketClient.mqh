@@ -244,45 +244,29 @@ private:
         }
         
         
-        Print("WebSocketClient: Request sent. Waiting for response (10s timeout)...");
+        Print("WebSocketClient: Request sent. Waiting for response...");
         
-        // Polling loop for response
-        int attempts = 0;
-        int max_attempts = 100; // 100 * 100ms = 10 seconds
+        // Give server time to process and respond
+        Sleep(500);
         
-        while(attempts < max_attempts)
+        // Check if socket is still valid
+        if(m_socket == INVALID_HANDLE)
         {
-            // Check TCP connection (not WebSocket level - use m_connected, not IsConnected())
-            if(!m_connected || m_socket == INVALID_HANDLE)
-            {
-                 Print("WebSocketClient: TCP connection lost while waiting for handshake");
-                 return false;
-            }
-            
-            uint readable = SocketIsReadable(m_socket);
-            if(readable > 0)
-            {
-                Print("WebSocketClient: Data available: ", readable, " bytes after ", attempts*100, "ms");
-                break;
-            }
-            
-            Sleep(100);
-            attempts++;
-            
-            if(attempts % 10 == 0) // Print every second
-                Print("WebSocketClient: Waiting... ", attempts/10, "s");
-        }
-        
-        if(attempts >= max_attempts)
-        {
-            Print("WebSocketClient: Handshake timeout - No data received");
+            Print("WebSocketClient: Socket became invalid before reading");
             return false;
         }
         
-        // Read response
+        // Check readable bytes
+        uint readable = SocketIsReadable(m_socket);
+        Print("WebSocketClient: SocketIsReadable returned: ", readable);
+        
+        // Read response with reasonable timeout
         uchar response[];
         ArrayResize(response, 4096);
-        int received = SocketRead(m_socket, response, 4096, 1000); // 1s timeout for reading available data
+        Print("WebSocketClient: Calling SocketRead with 10s timeout...");
+        int received = SocketRead(m_socket, response, 4096, 10000);
+        
+        Print("WebSocketClient: SocketRead returned: ", received);
         
         if(received < 0)
         {
@@ -294,12 +278,13 @@ private:
         
         if(received == 0)
         {
-            Print("WebSocketClient: No handshake response read (unexpected)");
+            Print("WebSocketClient: No handshake response (timeout)");
             return false;
         }
         
         string response_str = CharArrayToString(response, 0, received);
-        Print("WebSocketClient: Received response (", received, " bytes):\n", response_str);
+        Print("WebSocketClient: Received response (", received, " bytes):");
+        Print(response_str);
         
         // Check for 101 Switching Protocols
         if(StringFind(response_str, "101") < 0)
