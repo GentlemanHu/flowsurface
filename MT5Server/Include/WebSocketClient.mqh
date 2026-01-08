@@ -252,9 +252,10 @@ private:
         
         while(attempts < max_attempts)
         {
-            if(!IsConnected())
+            // Check TCP connection (not WebSocket level - use m_connected, not IsConnected())
+            if(!m_connected || m_socket == INVALID_HANDLE)
             {
-                 Print("WebSocketClient: Disconnected while waiting for handshake");
+                 Print("WebSocketClient: TCP connection lost while waiting for handshake");
                  return false;
             }
             
