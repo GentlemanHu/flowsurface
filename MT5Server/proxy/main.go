@@ -144,11 +144,17 @@ func getEnvOrDefault(key, defaultVal string) string {
 
 // handleMT5 handles MT5 EA WebSocket connections
 func (s *Server) handleMT5(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[MT5] Incoming HTTP request from %s, path: %s\n", r.RemoteAddr, r.URL.Path)
+	
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[MT5] Upgrade error: %v\n", err)
 		return
 	}
+
+	// Set read deadline to prevent premature timeout
+	// The MQL5 client needs time to complete handshake and send first message
+	ws.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	s.mu.Lock()
 	s.connectionIDCtr++
@@ -164,7 +170,7 @@ func (s *Server) handleMT5(w http.ResponseWriter, r *http.Request) {
 	s.mt5Connections[connID] = conn
 	s.mu.Unlock()
 
-	log.Printf("[MT5] Connection from %s (id: %d)\n", conn.IP, connID)
+	log.Printf("[MT5] Connection established from %s (id: %d)\n", conn.IP, connID)
 
 	defer func() {
 		ws.Close()
@@ -175,14 +181,21 @@ func (s *Server) handleMT5(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		_, message, err := ws.ReadMessage()
+		messageType, message, err := ws.ReadMessage()
 		if err != nil {
+			// Log detailed error information
+			log.Printf("[MT5] ReadMessage error (id: %d): %v\n", connID, err)
 			break
 		}
+		
+		// Reset read deadline on successful read
+		ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+		
 		conn.mu.Lock()
 		conn.LastActivity = time.Now()
 		conn.mu.Unlock()
 
+		log.Printf("[MT5] Received message (id: %d, type: %d, len: %d)\n", connID, messageType, len(message))
 		s.handleMT5Message(conn, message)
 	}
 }

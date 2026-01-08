@@ -16,6 +16,7 @@ private:
     int    m_socket;
     bool   m_connected;
     bool   m_handshake_done;
+    bool   m_connecting;  // Flag to prevent reentrant connection attempts
     string m_host;
     int    m_port;
     string m_path;
@@ -27,6 +28,7 @@ public:
         m_socket = INVALID_HANDLE;
         m_connected = false;
         m_handshake_done = false;
+        m_connecting = false;
         m_host = "";
         m_port = 9876;
         m_path = "/mt5";
@@ -40,6 +42,22 @@ public:
     //--- Connection
     bool Connect(const string host, const int port, const string path = "/mt5")
     {
+        // Prevent reentrant connection attempts
+        if(m_connecting)
+        {
+            Print("WebSocketClient: Connection already in progress, skipping");
+            return false;
+        }
+        
+        // Disconnect any existing connection first
+        if(m_socket != INVALID_HANDLE || m_connected)
+        {
+            Print("WebSocketClient: Disconnecting existing connection before reconnect");
+            Disconnect();
+        }
+        
+        m_connecting = true;  // Set flag to prevent reentry
+        
         m_host = host;
         m_port = port;
         m_path = path;
@@ -53,6 +71,7 @@ public:
             int err = GetLastError();
             Print("WebSocketClient: SocketCreate failed - Error: ", err);
             PrintSocketErrorHelp(err);
+            m_connecting = false;
             return false;
         }
         
@@ -67,6 +86,7 @@ public:
             PrintSocketErrorHelp(err);
             SocketClose(m_socket);
             m_socket = INVALID_HANDLE;
+            m_connecting = false;
             return false;
         }
         
@@ -78,10 +98,12 @@ public:
         {
             Print("WebSocketClient: Handshake failed");
             Disconnect();
+            m_connecting = false;
             return false;
         }
         
         m_handshake_done = true;
+        m_connecting = false;
         Print("WebSocketClient: WebSocket handshake completed");
         return true;
     }
