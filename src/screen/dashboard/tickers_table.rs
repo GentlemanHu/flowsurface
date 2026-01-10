@@ -245,12 +245,14 @@ impl TickersTable {
                             if exchange == Exchange::MetaTrader5 {
                                 Task::none()
                             } else {
-                                Task::perform(fetch_ticker_prices(exchange), move |result| match result {
-                                    Ok(ticker_rows) => {
-                                        Message::UpdateTickerStats(exchange, ticker_rows)
-                                    }
-                                    Err(err) => {
-                                        Message::ErrorOccurred(InternalError::Fetch(err.to_string()))
+                                Task::perform(fetch_ticker_prices(exchange), move |result| {
+                                    match result {
+                                        Ok(ticker_rows) => {
+                                            Message::UpdateTickerStats(exchange, ticker_rows)
+                                        }
+                                        Err(err) => Message::ErrorOccurred(InternalError::Fetch(
+                                            err.to_string(),
+                                        )),
                                     }
                                 })
                             }
