@@ -124,25 +124,68 @@ public:
     }
 
 private:
-    //--- HMAC-SHA256 Implementation
+    //--- HMAC-SHA256 Implementation (RFC 2104)
     string HMAC_SHA256(const string message, const string key)
     {
-        // Simplified HMAC implementation using MQL5's built-in crypto
-        uchar msg_array[];
-        uchar key_array[];
-        uchar result[];
+        const int BLOCK_SIZE = 64;  // SHA256 block size
         
-        StringToCharArray(message, msg_array, 0, StringLen(message));
-        StringToCharArray(key, key_array, 0, StringLen(key));
+        // Convert strings to byte arrays
+        uchar key_bytes[];
+        uchar message_bytes[];
+        StringToCharArray(key, key_bytes, 0, StringLen(key));
+        StringToCharArray(message, message_bytes, 0, StringLen(message));
         
-        // Use CryptEncode for HMAC-SHA256
-        if(CryptEncode(CRYPT_HASH_SHA256, msg_array, key_array, result))
+        // If key is longer than block size, hash it first
+        if(ArraySize(key_bytes) > BLOCK_SIZE)
         {
-            return ArrayToHex(result);
+            uchar hashed_key[];
+            uchar dummy[];
+            CryptEncode(CRYPT_HASH_SHA256, key_bytes, dummy, hashed_key);
+            ArrayCopy(key_bytes, hashed_key);
+            ArrayResize(key_bytes, ArraySize(hashed_key));
         }
         
-        // Fallback: simple hash if HMAC fails
-        return SimpleHash(message + key);
+        // Pad key to block size
+        if(ArraySize(key_bytes) < BLOCK_SIZE)
+        {
+            int old_size = ArraySize(key_bytes);
+            ArrayResize(key_bytes, BLOCK_SIZE);
+            for(int i = old_size; i < BLOCK_SIZE; i++)
+                key_bytes[i] = 0x00;
+        }
+        
+        // Create inner and outer key pads
+        uchar i_key_pad[];
+        uchar o_key_pad[];
+        ArrayResize(i_key_pad, BLOCK_SIZE);
+        ArrayResize(o_key_pad, BLOCK_SIZE);
+        
+        for(int i = 0; i < BLOCK_SIZE; i++)
+        {
+            i_key_pad[i] = key_bytes[i] ^ 0x36;
+            o_key_pad[i] = key_bytes[i] ^ 0x5C;
+        }
+        
+        // Inner hash: SHA256(i_key_pad + message)
+        uchar inner_data[];
+        ArrayResize(inner_data, BLOCK_SIZE + ArraySize(message_bytes));
+        ArrayCopy(inner_data, i_key_pad, 0, 0, BLOCK_SIZE);
+        ArrayCopy(inner_data, message_bytes, BLOCK_SIZE, 0, ArraySize(message_bytes));
+        
+        uchar inner_hash[];
+        uchar dummy[];
+        CryptEncode(CRYPT_HASH_SHA256, inner_data, dummy, inner_hash);
+        
+        // Outer hash: SHA256(o_key_pad + inner_hash)
+        uchar outer_data[];
+        ArrayResize(outer_data, BLOCK_SIZE + ArraySize(inner_hash));
+        ArrayCopy(outer_data, o_key_pad, 0, 0, BLOCK_SIZE);
+        ArrayCopy(outer_data, inner_hash, BLOCK_SIZE, 0, ArraySize(inner_hash));
+        
+        uchar result[];
+        CryptEncode(CRYPT_HASH_SHA256, outer_data, dummy, result);
+        
+        return ArrayToHex(result);
     }
     
     string ArrayToHex(const uchar &arr[])
