@@ -384,6 +384,7 @@ func (s *Server) handleClientAuth(conn *Connection, msg Message) {
 // validateAuth validates API key and signature
 func (s *Server) validateAuth(apiKey string, timestamp int64, signature string) bool {
 	if apiKey != s.config.APIKey {
+		log.Printf("[Auth] API Key mismatch: received '%s', expected '%s'\n", apiKey, s.config.APIKey)
 		return false
 	}
 
@@ -393,11 +394,18 @@ func (s *Server) validateAuth(apiKey string, timestamp int64, signature string) 
 		diff = -diff
 	}
 	if diff > s.config.TimestampTolerance {
+		log.Printf("[Auth] Timestamp expired: server=%d, client=%d, diff=%dms, tolerance=%dms\n", 
+			now, timestamp, diff, s.config.TimestampTolerance)
 		return false
 	}
 
 	expected := s.computeSignature(apiKey, timestamp)
-	return signature == expected
+	if signature != expected {
+		log.Printf("[Auth] Signature mismatch: received '%s', expected '%s'\n", signature, expected)
+		return false
+	}
+	
+	return true
 }
 
 // computeSignature computes HMAC-SHA256 signature
