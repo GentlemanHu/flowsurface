@@ -597,18 +597,17 @@ impl Flowsurface {
             Message::FetchMt5Symbols(config) => {
                 return Task::perform(
                     async move { exchange::adapter::metatrader5::fetch_ticksize(&config).await },
-                    |result| {
-                        Message::Mt5SymbolsReceived(result.map_err(|e| e.to_string()))
-                    },
+                    |result| Message::Mt5SymbolsReceived(result.map_err(|e| e.to_string())),
                 );
             }
             Message::Mt5SymbolsReceived(result) => match result {
                 Ok(info) => {
-                    self.sidebar.tickers_table
-                        .update(dashboard::tickers_table::Message::UpdateTickersInfo(
+                    self.sidebar.tickers_table.update(
+                        dashboard::tickers_table::Message::UpdateTickersInfo(
                             exchange::adapter::Exchange::MetaTrader5,
                             info.clone(),
-                        ));
+                        ),
+                    );
 
                     let count = info.len();
                     log::info!("Fetched {} MT5 symbols", count);

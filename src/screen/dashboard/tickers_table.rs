@@ -55,11 +55,7 @@ const EXCHANGE_FILTERS: [(ExchangeInclusive, Exchange, &str); 5] = [
         "Hyperliquid",
     ),
     (ExchangeInclusive::Okex, Exchange::OkexLinear, "OKX"),
-    (
-        ExchangeInclusive::MetaTrader5,
-        Exchange::MetaTrader5,
-        "MT5",
-    ),
+    (ExchangeInclusive::MetaTrader5, Exchange::MetaTrader5, "MT5"),
 ];
 
 pub fn fetch_tickers_info() -> Task<Message> {
@@ -161,7 +157,7 @@ impl TickersTable {
     pub fn update(&mut self, message: Message) -> Option<Action> {
         match message {
             Message::UpdateSearchQuery(query) => {
-                self.search_query = query;  // Keep original case
+                self.search_query = query; // Keep original case
             }
             Message::ChangeSortOption(option) => {
                 self.change_sort_option(option);
@@ -358,7 +354,7 @@ impl TickersTable {
         FSearch: 'static + Copy + Fn(String) -> M,
         FScroll: 'static + Copy + Fn(scrollable::Viewport) -> M,
     {
-        let injected_q = search_query;  // Keep original case
+        let injected_q = search_query; // Keep original case
 
         let selection_enabled = selected_tickers.is_some();
 
