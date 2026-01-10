@@ -97,7 +97,7 @@ enum Message {
     AudioStream(modal::audio::Message),
     Mt5Config(modal::mt5_config::Message),
     Mt5ConnectionTestResult(Result<(), String>),
-    FetchMt5Symbols(exchange::Mt5Config),
+    FetchMt5Symbols(exchange::adapter::metatrader5::Mt5Config),
     Mt5SymbolsReceived(
         Result<std::collections::HashMap<exchange::Ticker, Option<exchange::TickerInfo>>, String>,
     ),
@@ -604,10 +604,9 @@ impl Flowsurface {
             }
             Message::Mt5SymbolsReceived(result) => match result {
                 Ok(info) => {
-                    self.active_dashboard_mut()
-                        .tickers_table
+                    self.sidebar.tickers_table
                         .update(dashboard::tickers_table::Message::UpdateTickersInfo(
-                            exchange::Exchange::MetaTrader5,
+                            exchange::adapter::Exchange::MetaTrader5,
                             info.clone(),
                         ));
 
@@ -1166,7 +1165,7 @@ impl Flowsurface {
         }
     }
 
-    fn save_state_to_disk(&self, windows: &HashMap<window::Id, WindowSpec>) {
+    fn save_state_to_disk(&mut self, windows: &HashMap<window::Id, WindowSpec>) {
         self.active_dashboard_mut()
             .popout
             .iter_mut()
