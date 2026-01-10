@@ -369,7 +369,7 @@ impl TickersTable {
             selected_set.insert(bt.ticker);
         }
 
-        let (fav_rows, rest_rows) = self.filtered_rows_compact(&injected_q, &selected_set);
+        let (fav_rows, rest_rows) = self.filtered_rows_compact(injected_q, &selected_set);
 
         let base_ticker_id = base_ticker.map(|bt| bt.ticker);
         let selected_list: Vec<TickerInfo> = selected_tickers
