@@ -221,11 +221,18 @@ impl TickersTable {
             }
             Message::FetchForTickerStats(exchange) => {
                 let task = if let Some(exchange) = exchange {
-                    self.pending_stats_batches = 1;
-                    Task::perform(fetch_ticker_prices(exchange), move |result| match result {
-                        Ok(ticker_rows) => Message::UpdateTickerStats(exchange, ticker_rows),
-                        Err(err) => Message::ErrorOccurred(InternalError::Fetch(err.to_string())),
-                    })
+                    if exchange == Exchange::MetaTrader5 {
+                        self.pending_stats_batches = 0;
+                        Task::none()
+                    } else {
+                        self.pending_stats_batches = 1;
+                        Task::perform(fetch_ticker_prices(exchange), move |result| match result {
+                            Ok(ticker_rows) => Message::UpdateTickerStats(exchange, ticker_rows),
+                            Err(err) => {
+                                Message::ErrorOccurred(InternalError::Fetch(err.to_string()))
+                            }
+                        })
+                    }
                 } else {
                     let exchanges: FxHashSet<Exchange> =
                         self.tickers_info.keys().map(|t| t.exchange).collect();
@@ -235,15 +242,19 @@ impl TickersTable {
                     let fetch_tasks = exchanges
                         .into_iter()
                         .map(|exchange| {
-                            Task::perform(fetch_ticker_prices(exchange), move |result| match result
-                            {
-                                Ok(ticker_rows) => {
-                                    Message::UpdateTickerStats(exchange, ticker_rows)
-                                }
-                                Err(err) => {
-                                    Message::ErrorOccurred(InternalError::Fetch(err.to_string()))
-                                }
-                            })
+                            if exchange == Exchange::MetaTrader5 {
+                                Task::none()
+                            } else {
+                                Task::perform(fetch_ticker_prices(exchange), move |result| match result
+                                {
+                                    Ok(ticker_rows) => {
+                                        Message::UpdateTickerStats(exchange, ticker_rows)
+                                    }
+                                    Err(err) => {
+                                        Message::ErrorOccurred(InternalError::Fetch(err.to_string()))
+                                    }
+                                })
+                            }
                         })
                         .collect::<Vec<Task<Message>>>();
 
@@ -265,11 +276,14 @@ impl TickersTable {
             Message::UpdateTickersInfo(exchange, info) => {
                 self.update_ticker_info(exchange, info);
 
-                let task =
+                let task = if exchange == Exchange::MetaTrader5 {
+                    Task::none()
+                } else {
                     Task::perform(fetch_ticker_prices(exchange), move |result| match result {
                         Ok(ticker_rows) => Message::UpdateTickerStats(exchange, ticker_rows),
                         Err(err) => Message::ErrorOccurred(InternalError::Fetch(err.to_string())),
-                    });
+                    })
+                };
 
                 return Some(Action::Fetch(task));
             }
