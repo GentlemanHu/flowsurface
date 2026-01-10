@@ -499,6 +499,7 @@ impl Flowsurface {
                             .copied()
                             .collect::<Vec<window::Id>>();
                         active_windows.push(self.main_window.id);
+                        return window::collect_window_specs(
                             active_windows,
                             Message::SaveStateOnly,
                         )
