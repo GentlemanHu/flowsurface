@@ -42,7 +42,7 @@ const SORT_AND_FILTER_HEIGHT: f32 = 200.0;
 
 const COMPACT_ROW_HEIGHT: f32 = 28.0;
 
-const EXCHANGE_FILTERS: [(ExchangeInclusive, Exchange, &str); 4] = [
+const EXCHANGE_FILTERS: [(ExchangeInclusive, Exchange, &str); 5] = [
     (ExchangeInclusive::Bybit, Exchange::BybitLinear, "Bybit"),
     (
         ExchangeInclusive::Binance,
@@ -55,6 +55,11 @@ const EXCHANGE_FILTERS: [(ExchangeInclusive, Exchange, &str); 4] = [
         "Hyperliquid",
     ),
     (ExchangeInclusive::Okex, Exchange::OkexLinear, "OKX"),
+    (
+        ExchangeInclusive::MetaTrader5,
+        Exchange::MetaTrader5,
+        "MT5",
+    ),
 ];
 
 pub fn fetch_tickers_info() -> Task<Message> {
@@ -156,7 +161,7 @@ impl TickersTable {
     pub fn update(&mut self, message: Message) -> Option<Action> {
         match message {
             Message::UpdateSearchQuery(query) => {
-                self.search_query = query.to_uppercase();
+                self.search_query = query;  // Keep original case
             }
             Message::ChangeSortOption(option) => {
                 self.change_sort_option(option);
@@ -353,7 +358,7 @@ impl TickersTable {
         FSearch: 'static + Copy + Fn(String) -> M,
         FScroll: 'static + Copy + Fn(scrollable::Viewport) -> M,
     {
-        let injected_q = search_query.to_uppercase();
+        let injected_q = search_query;  // Keep original case
 
         let selection_enabled = selected_tickers.is_some();
 
@@ -1140,6 +1145,9 @@ fn calc_search_rank(row: &TickerRowData, query: &str) -> Option<SearchRank> {
         });
     }
 
+    // Convert query to uppercase for case-insensitive matching
+    let query_upper = query.to_ascii_uppercase();
+
     let (mut display_str, _) = row.ticker.display_symbol_and_type();
     let (mut raw_str, _) = row.ticker.to_full_symbol_and_type();
 
@@ -1155,13 +1163,13 @@ fn calc_search_rank(row: &TickerRowData, query: &str) -> Option<SearchRank> {
     // For perps: do NOT allow "exact match" on the unsuffixed candidates, since the UI
     // label is effectively suffixed (e.g., "...P") and unsuffixed exact hits are misleading.
     let score_candidate = |cand: &str, allow_exact: bool| -> Option<SearchRank> {
-        let (bucket, pos) = if allow_exact && cand == query {
+        let (bucket, pos) = if allow_exact && cand == query_upper {
             (0_u8, 0_usize) // exact
-        } else if cand.starts_with(query) {
+        } else if cand.starts_with(&query_upper) {
             (1_u8, 0_usize) // prefix
-        } else if cand.ends_with(query) {
+        } else if cand.ends_with(&query_upper) {
             (2_u8, 0_usize) // suffix
-        } else if let Some(p) = cand.find(query) {
+        } else if let Some(p) = cand.find(&query_upper) {
             (3_u8, p) // substring
         } else {
             return None;

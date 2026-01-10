@@ -97,6 +97,10 @@ enum Message {
     AudioStream(modal::audio::Message),
     Mt5Config(modal::mt5_config::Message),
     Mt5ConnectionTestResult(Result<(), String>),
+    FetchMt5Symbols(exchange::Mt5Config),
+    Mt5SymbolsReceived(
+        Result<std::collections::HashMap<exchange::Ticker, Option<exchange::TickerInfo>>, String>,
+    ),
 }
 
 impl Flowsurface {
@@ -464,6 +468,9 @@ impl Flowsurface {
                             auto_reconnect: config.auto_reconnect,
                         };
 
+                        // Trigger fetch symbols immediately
+                        let fetch_cmd = Task::done(Message::FetchMt5Symbols(config.clone()));
+
                         // Add or update connection in settings
                         if let Some(existing) = self
                             .mt5_settings
@@ -492,10 +499,10 @@ impl Flowsurface {
                             .copied()
                             .collect::<Vec<window::Id>>();
                         active_windows.push(self.main_window.id);
-                        return window::collect_window_specs(
                             active_windows,
                             Message::SaveStateOnly,
-                        );
+                        )
+                        .chain(fetch_cmd);
                     }
                     modal::mt5_config::Action::TestConnection(config) => {
                         // Spawn async connection test
@@ -586,6 +593,40 @@ impl Flowsurface {
 
                 return window::collect_window_specs(active_windows, Message::RestartRequested);
             }
+            Message::FetchMt5Symbols(config) => {
+                return Task::perform(
+                    async move { exchange::adapter::metatrader5::fetch_ticksize(&config).await },
+                    |result| {
+                        Message::Mt5SymbolsReceived(result.map_err(|e| e.to_string()))
+                    },
+                );
+            }
+            Message::Mt5SymbolsReceived(result) => match result {
+                Ok(info) => {
+                    self.active_dashboard_mut()
+                        .tickers_table
+                        .update(dashboard::tickers_table::Message::UpdateTickersInfo(
+                            exchange::Exchange::MetaTrader5,
+                            info.clone(),
+                        ));
+
+                    let count = info.len();
+                    log::info!("Fetched {} MT5 symbols", count);
+                    self.notifications
+                        .push(Toast::new(widget::toast::Notification::Info(format!(
+                            "Connected! Found {} symbols",
+                            count
+                        ))));
+
+                    // Auto-connect to market data stream for all symbols if needed,
+                    // or just let the user search. For now, we update the table.
+                }
+                Err(e) => {
+                    log::error!("Failed to fetch MT5 symbols: {}", e);
+                    self.notifications
+                        .push(Toast::error(format!("MT5 Symbol Fetch Failed: {}", e)));
+                }
+            },
         }
         Task::none()
     }
@@ -1122,9 +1163,11 @@ impl Flowsurface {
                 )
             }
         }
+        None
+    }
     }
 
-    fn save_state_to_disk(&mut self, windows: &HashMap<window::Id, WindowSpec>) {
+    fn save_state_to_disk(&self, windows: &HashMap<window::Id, WindowSpec>) {
         self.active_dashboard_mut()
             .popout
             .iter_mut()
