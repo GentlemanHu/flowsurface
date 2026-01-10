@@ -1163,8 +1163,6 @@ impl Flowsurface {
                 )
             }
         }
-        None
-    }
     }
 
     fn save_state_to_disk(&self, windows: &HashMap<window::Id, WindowSpec>) {
