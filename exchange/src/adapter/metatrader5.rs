@@ -785,8 +785,15 @@ mod tests {
 
     #[test]
     fn test_hmac_signature() {
-        let signature = compute_hmac_signature("test_key", 1704355200000, "secret");
+        // Test with same values as Go test
+        let signature = compute_hmac_signature("123456", 1704355200000, "123456");
         assert!(!signature.is_empty());
         assert_eq!(signature.len(), 64); // SHA-256 produces 32 bytes = 64 hex chars
+        
+        // This should match Go's output: '9ee72b2e88059adefc665b4fff96b888f5d71dfbdcbd8c289e5eb518dc0000bf'
+        assert_eq!(
+            signature,
+            "9ee72b2e88059adefc665b4fff96b888f5d71dfbdcbd8c289e5eb518dc0000bf"
+        );
     }
 }
