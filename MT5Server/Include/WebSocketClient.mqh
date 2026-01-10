@@ -21,6 +21,8 @@ private:
     int    m_port;
     string m_path;
     uchar  m_recv_buffer[];
+    datetime m_last_pong_time;   // Time of last received pong/message
+    int    m_heartbeat_timeout;  // Heartbeat timeout in seconds
     
 public:
     CWebSocketClient()
@@ -32,6 +34,8 @@ public:
         m_host = "";
         m_port = 9876;
         m_path = "/mt5";
+        m_last_pong_time = 0;
+        m_heartbeat_timeout = 60;  // Default 60 seconds timeout
     }
     
     ~CWebSocketClient()
@@ -133,6 +137,28 @@ public:
     
     bool IsConnected() { return m_connected && m_handshake_done; }
     
+    //--- Set heartbeat timeout
+    void SetHeartbeatTimeout(int seconds) { m_heartbeat_timeout = seconds; }
+    
+    //--- Check if connection timed out (no pong received)
+    bool IsTimedOut()
+    {
+        if(!IsConnected()) return false;
+        if(m_last_pong_time == 0) return false;  // Not yet initialized
+        return (TimeCurrent() - m_last_pong_time) > m_heartbeat_timeout;
+    }
+    
+    //--- Update last activity time (call when receiving any message)
+    void UpdateActivity() { m_last_pong_time = TimeCurrent(); }
+    
+    //--- Send ping frame
+    bool SendPing()
+    {
+        if(!IsConnected()) return false;
+        uchar empty[];
+        return SendFrame(0x09, empty);  // Ping opcode
+    }
+    
     //--- Send text message
     bool SendText(const string message)
     {
@@ -149,12 +175,33 @@ public:
     {
         if(!IsConnected()) return false;
         
+        // Check if socket is still valid
+        if(m_socket == INVALID_HANDLE)
+        {
+            m_connected = false;
+            m_handshake_done = false;
+            return false;
+        }
+        
         // Check if socket is readable
-        if(SocketIsReadable(m_socket) == 0)
+        uint readable = SocketIsReadable(m_socket);
+        if(readable == 0)
             return false;
         
         uchar header[2];
         int read = SocketRead(m_socket, header, 2, (uint)timeout_ms);
+        if(read <= 0)
+        {
+            // Read error - connection may be broken
+            int err = GetLastError();
+            if(err == 5273 || err == 5270 || read < 0)  // Invalid handle or disconnected
+            {
+                Print("WebSocketClient: Read error, marking disconnected. Error: ", err);
+                m_connected = false;
+                m_handshake_done = false;
+            }
+            return false;
+        }
         if(read != 2)
             return false;
         
@@ -388,7 +435,17 @@ private:
         for(int i = 0; i < payload_len; i++)
             frame[pos++] = payload[i] ^ mask_key[i % 4];
         
-        return SocketSend(m_socket, frame, ArraySize(frame));
+        int sent = SocketSend(m_socket, frame, ArraySize(frame));
+        if(sent <= 0)
+        {
+            // Send error - connection broken
+            int err = GetLastError();
+            Print("WebSocketClient: Send error, marking disconnected. Error: ", err);
+            m_connected = false;
+            m_handshake_done = false;
+            return false;
+        }
+        return sent == ArraySize(frame);
     }
     
     //--- Generate WebSocket key

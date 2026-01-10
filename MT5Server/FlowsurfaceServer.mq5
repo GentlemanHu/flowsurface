@@ -119,19 +119,30 @@ void OnTimer()
     {
         if(TimeCurrent() - g_last_reconnect_attempt >= InpReconnectSec)
         {
+            Print("Attempting to reconnect to proxy server...");
             ConnectToProxy();
             g_last_reconnect_attempt = TimeCurrent();
         }
         return;
     }
     
+    //--- Check heartbeat timeout (no response from server)
+    if(g_client.IsTimedOut())
+    {
+        Print("Connection timed out (no heartbeat response), disconnecting...");
+        g_client.Disconnect();
+        g_authenticated = false;
+        return;
+    }
+    
     //--- Process incoming messages
     ProcessIncomingMessages();
     
-    //--- Send heartbeat
+    //--- Send heartbeat (using Ping frame + custom heartbeat)
     if(g_authenticated && TimeCurrent() - g_last_heartbeat >= InpHeartbeatSec)
     {
-        SendHeartbeat();
+        g_client.SendPing();  // WebSocket ping for connection check
+        SendHeartbeat();       // Application-level heartbeat
         g_last_heartbeat = TimeCurrent();
     }
 }
@@ -257,6 +268,7 @@ void ConnectToProxy()
     
     Print("Connected to proxy server, sending authentication...");
     g_authenticated = false;
+    g_client.UpdateActivity();  // Initialize activity time
     
     //--- Send authentication
     long timestamp = g_auth.GetCurrentTimestampMs();
@@ -281,6 +293,7 @@ void ProcessIncomingMessages()
     string message;
     while(g_client.ReceiveText(message, 10))
     {
+        g_client.UpdateActivity();  // Update last activity time on any message
         HandleProxyMessage(message);
     }
 }
