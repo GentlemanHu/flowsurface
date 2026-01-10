@@ -411,6 +411,7 @@ func (s *Server) validateAuth(apiKey string, timestamp int64, signature string) 
 // computeSignature computes HMAC-SHA256 signature
 func (s *Server) computeSignature(apiKey string, timestamp int64) string {
 	message := fmt.Sprintf("%s%d", apiKey, timestamp)
+	log.Printf("[Auth Debug] message='%s', secret='%s'", message, s.config.APISecret)
 	mac := hmac.New(sha256.New, []byte(s.config.APISecret))
 	mac.Write([]byte(message))
 	return hex.EncodeToString(mac.Sum(nil))
