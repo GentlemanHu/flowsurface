@@ -484,8 +484,18 @@ impl Flowsurface {
                                 "MT5 configuration saved".to_string(),
                             )));
 
-                        // Trigger save to disk by requesting window info
-                        return iced::window::get_latest().map(Message::SaveStateOnly);
+                        // Trigger save to disk by collecting window specs
+                        let mut active_windows = self
+                            .active_dashboard_mut()
+                            .popout
+                            .keys()
+                            .copied()
+                            .collect::<Vec<window::Id>>();
+                        active_windows.push(self.main_window.id);
+                        return window::collect_window_specs(
+                            active_windows,
+                            Message::SaveStateOnly,
+                        );
                     }
                     modal::mt5_config::Action::TestConnection(config) => {
                         // Spawn async connection test
