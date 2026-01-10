@@ -60,6 +60,7 @@ struct Flowsurface {
     theme_editor: ThemeEditor,
     audio_stream: AudioStream,
     mt5_modal: Mt5ConfigModal,
+    mt5_settings: data::Mt5Settings,
     confirm_dialog: Option<screen::ConfirmDialog<Message>>,
     volume_size_unit: exchange::SizeUnit,
     ui_scale_factor: data::ScaleFactor,
@@ -81,6 +82,7 @@ enum Message {
     WindowEvent(window::Event),
     ExitRequested(HashMap<window::Id, WindowSpec>),
     RestartRequested(HashMap<window::Id, WindowSpec>),
+    SaveStateOnly(HashMap<window::Id, WindowSpec>),
     GoBack,
     DataFolderRequested,
     ThemeSelected(data::Theme),
@@ -120,6 +122,7 @@ impl Flowsurface {
             theme_editor: ThemeEditor::new(saved_state.custom_theme),
             audio_stream: AudioStream::new(saved_state.audio_cfg),
             mt5_modal: Mt5ConfigModal::new(),
+            mt5_settings: saved_state.mt5_settings,
             sidebar,
             confirm_dialog: None,
             timezone: saved_state.timezone,
@@ -235,6 +238,10 @@ impl Flowsurface {
             Message::RestartRequested(windows) => {
                 self.save_state_to_disk(&windows);
                 return self.restart();
+            }
+            Message::SaveStateOnly(windows) => {
+                self.save_state_to_disk(&windows);
+                // Just save, don't exit
             }
             Message::GoBack => {
                 let main_window = self.main_window.id;
@@ -448,13 +455,37 @@ impl Flowsurface {
                         self.sidebar.set_menu(None);
                     }
                     modal::mt5_config::Action::SaveConfig(config) => {
-                        // Save config and close modal
+                        // Convert exchange::Mt5Config to data::Mt5Connection
+                        let connection = data::Mt5Connection {
+                            name: format!("MT5 {}", config.server_addr),
+                            server_addr: config.server_addr.clone(),
+                            api_key: config.api_key.clone(),
+                            use_tls: config.use_tls,
+                            auto_reconnect: config.auto_reconnect,
+                        };
+
+                        // Add or update connection in settings
+                        if let Some(existing) = self
+                            .mt5_settings
+                            .connections
+                            .iter_mut()
+                            .find(|c| c.server_addr == connection.server_addr)
+                        {
+                            *existing = connection.clone();
+                        } else {
+                            self.mt5_settings.connections.push(connection.clone());
+                        }
+                        self.mt5_settings.active_connection = Some(connection.name.clone());
+
                         log::info!("MT5 config saved: {}", config.server_addr);
                         self.sidebar.set_menu(None);
                         self.notifications
                             .push(Toast::new(widget::toast::Notification::Info(
                                 "MT5 configuration saved".to_string(),
                             )));
+
+                        // Trigger save to disk by requesting window info
+                        return iced::window::get_latest().map(Message::SaveStateOnly);
                     }
                     modal::mt5_config::Action::TestConnection(config) => {
                         // Spawn async connection test
@@ -1132,6 +1163,7 @@ impl Flowsurface {
             self.ui_scale_factor,
             audio_cfg,
             self.volume_size_unit,
+            self.mt5_settings.clone(),
         );
 
         match serde_json::to_string(&state) {

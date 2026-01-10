@@ -64,6 +64,7 @@ impl State {
         scale_factor: ScaleFactor,
         audio_cfg: AudioStream,
         volume_size_unit: exchange::SizeUnit,
+        mt5_settings: Mt5Settings,
     ) -> Self {
         State {
             layout_manager,
@@ -76,7 +77,7 @@ impl State {
             audio_cfg,
             trade_fetch_enabled: exchange::fetcher::is_trade_fetch_enabled(),
             size_in_quote_ccy: volume_size_unit,
-            mt5_settings: Mt5Settings::default(),
+            mt5_settings,
         }
     }
 }
