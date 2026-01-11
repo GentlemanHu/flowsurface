@@ -496,7 +496,7 @@ pub fn connect_market_stream_global(
     } else {
         log::error!("MT5 connect_market_stream_global called but no config set");
         // Return an empty stream that just sends disconnected event
-        stream::channel(1, move |mut output| async move {
+        stream::channel(1, move |mut output: mpsc::Sender<Event>| async move {
             let _ = output
                 .send(Event::Disconnected(
                     super::Exchange::MetaTrader5,
