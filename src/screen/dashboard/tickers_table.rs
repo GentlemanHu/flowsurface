@@ -584,11 +584,32 @@ impl TickersTable {
 
     fn update_ticker_info(
         &mut self,
-        _exchange: Exchange,
+        exchange: Exchange,
         info: HashMap<Ticker, Option<TickerInfo>>,
     ) {
         for (ticker, ticker_info) in info.into_iter() {
             self.tickers_info.insert(ticker, ticker_info);
+
+            // For MT5, we need to create ticker_rows directly since there's no
+            // fetch_ticker_prices endpoint. Other exchanges will get their rows
+            // populated via update_ticker_rows when price stats are fetched.
+            if exchange == Exchange::MetaTrader5 && !self.row_index.contains_key(&ticker) {
+                let new_row = TickerRowData {
+                    exchange,
+                    ticker,
+                    stats: TickerStats::default(),
+                    previous_stats: None,
+                    is_favorited: self.favorited_tickers.contains(&ticker),
+                };
+                self.ticker_rows.push(new_row);
+                let idx = self.ticker_rows.len() - 1;
+                self.row_index.insert(ticker, idx);
+
+                self.display_cache.insert(
+                    ticker,
+                    compute_display_data(&ticker, &self.ticker_rows[idx].stats, None),
+                );
+            }
         }
     }
 
