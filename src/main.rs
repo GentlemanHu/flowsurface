@@ -484,6 +484,9 @@ impl Flowsurface {
                         }
                         self.mt5_settings.active_connection = Some(connection.name.clone());
 
+                        // Set global config so fetch_klines can access it
+                        exchange::adapter::metatrader5::set_global_config(config.clone());
+
                         log::info!("MT5 config saved: {}", config.server_addr);
                         self.sidebar.set_menu(None);
                         self.notifications

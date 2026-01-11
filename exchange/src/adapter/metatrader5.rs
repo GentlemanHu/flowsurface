@@ -34,6 +34,35 @@ use iced_futures::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::sync::RwLock;
+
+// ============================================================================
+// Global MT5 Configuration Storage
+// ============================================================================
+
+/// Global storage for the active MT5 configuration.
+/// This allows adapter::fetch_klines and other global functions to access the MT5 config.
+static GLOBAL_MT5_CONFIG: RwLock<Option<Mt5Config>> = RwLock::new(None);
+
+/// Set the global MT5 configuration (called when user saves config)
+pub fn set_global_config(config: Mt5Config) {
+    if let Ok(mut global) = GLOBAL_MT5_CONFIG.write() {
+        log::info!("MT5 global config set for server: {}", config.server_addr);
+        *global = Some(config);
+    }
+}
+
+/// Get a clone of the global MT5 configuration
+pub fn get_global_config() -> Option<Mt5Config> {
+    GLOBAL_MT5_CONFIG.read().ok().and_then(|g| g.clone())
+}
+
+/// Clear the global MT5 configuration
+pub fn clear_global_config() {
+    if let Ok(mut global) = GLOBAL_MT5_CONFIG.write() {
+        *global = None;
+    }
+}
 
 // ============================================================================
 // Configuration Types
@@ -415,27 +444,35 @@ pub async fn fetch_klines(
     // Get klines response
     let mut klines = Vec::new();
 
-    if let Some(Ok(Message::Text(text))) = ws.next().await
-        && let Ok(resp) = serde_json::from_str::<KlinesResponse>(&text)
-    {
-        for k in resp.data {
-            let buy_volume = (k.volume / 2.0) as f32;
-            let sell_volume = (k.volume / 2.0) as f32;
+    if let Some(Ok(Message::Text(text))) = ws.next().await {
+        log::debug!("MT5 klines response: {}", &text[..text.len().min(500)]);
+        match serde_json::from_str::<KlinesResponse>(&text) {
+            Ok(resp) => {
+                log::info!("MT5 received {} klines for {}", resp.data.len(), ticker_info.ticker);
+                for k in resp.data {
+                    let buy_volume = (k.volume / 2.0) as f32;
+                    let sell_volume = (k.volume / 2.0) as f32;
 
-            klines.push(Kline::new(
-                k.time,
-                k.open as f32,
-                k.high as f32,
-                k.low as f32,
-                k.close as f32,
-                (buy_volume, sell_volume),
-                ticker_info.min_ticksize,
-            ));
+                    klines.push(Kline::new(
+                        k.time,
+                        k.open as f32,
+                        k.high as f32,
+                        k.low as f32,
+                        k.close as f32,
+                        (buy_volume, sell_volume),
+                        ticker_info.min_ticksize,
+                    ));
+                }
+            }
+            Err(e) => {
+                log::error!("MT5 klines parse error: {} - response: {}", e, &text[..text.len().min(200)]);
+            }
         }
     }
 
     ws.close(None).await.ok();
 
+    log::info!("MT5 fetch_klines completed with {} klines", klines.len());
     Ok(klines)
 }
 

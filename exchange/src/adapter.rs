@@ -715,10 +715,15 @@ pub async fn fetch_klines(
             okex::fetch_klines(ticker_info, timeframe, range).await
         }
         Exchange::MetaTrader5 => {
-            // MT5 requires config-based API
-            Err(AdapterError::InvalidRequest(
-                "Use metatrader5::fetch_klines with Mt5Config".to_string(),
-            ))
+            // Try to get global MT5 config
+            if let Some(config) = metatrader5::get_global_config() {
+                metatrader5::fetch_klines(&config, ticker_info, timeframe, range).await
+            } else {
+                log::warn!("MT5 klines requested but no MT5 config is set");
+                Err(AdapterError::InvalidRequest(
+                    "MT5 not configured. Please configure MT5 connection first.".to_string(),
+                ))
+            }
         }
     }
 }
