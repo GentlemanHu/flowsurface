@@ -661,10 +661,15 @@ pub async fn fetch_ticker_info(
             okex::fetch_ticksize(market_type).await
         }
         Exchange::MetaTrader5 => {
-            // MT5 requires config-based API, use metatrader5::fetch_ticksize directly
-            Err(AdapterError::InvalidRequest(
-                "Use metatrader5::fetch_ticksize with Mt5Config".to_string(),
-            ))
+            // Try to get global MT5 config
+            if let Some(config) = metatrader5::get_global_config() {
+                log::info!("MT5 fetch_ticker_info using global config: {}", config.server_addr);
+                metatrader5::fetch_ticksize(&config).await
+            } else {
+                log::warn!("MT5 ticker info requested but no MT5 config is set");
+                // Return empty map instead of error - MT5 will be configured later
+                Ok(HashMap::new())
+            }
         }
     }
 }
@@ -688,10 +693,9 @@ pub async fn fetch_ticker_prices(
             okex::fetch_ticker_prices(market_type).await
         }
         Exchange::MetaTrader5 => {
-            // MT5 requires config-based API
-            Err(AdapterError::InvalidRequest(
-                "Use metatrader5::fetch_ticker_prices with Mt5Config".to_string(),
-            ))
+            // MT5 prices come from real-time stream, not REST API
+            // Return empty map - prices will be updated via subscription
+            Ok(HashMap::new())
         }
     }
 }
