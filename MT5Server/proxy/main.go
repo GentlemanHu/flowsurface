@@ -489,6 +489,10 @@ func (s *Server) handleGetSymbols(conn *Connection) {
 
 // handleGetKlines forwards klines request to MT5
 func (s *Server) handleGetKlines(conn *Connection, msg Message) {
+	symbol, _ := msg["symbol"].(string)
+	timeframe, _ := msg["timeframe"].(string)
+	log.Printf("[Client] Klines request: symbol=%s, timeframe=%s, client_id=%d\n", symbol, timeframe, conn.ID)
+
 	s.mu.RLock()
 	var mt5Conn *Connection
 	for _, c := range s.mt5Connections {
@@ -500,6 +504,7 @@ func (s *Server) handleGetKlines(conn *Connection, msg Message) {
 	s.mu.RUnlock()
 
 	if mt5Conn == nil {
+		log.Printf("[Client] Klines request failed: No MT5 connection available\n")
 		s.sendTo(conn.WS, Message{
 			"type":    "error",
 			"message": "No MT5 connection available",
@@ -508,6 +513,7 @@ func (s *Server) handleGetKlines(conn *Connection, msg Message) {
 	}
 
 	msg["request_id"] = float64(conn.ID)
+	log.Printf("[Client] Forwarding klines request to MT5, request_id=%d\n", conn.ID)
 	s.sendTo(mt5Conn.WS, msg)
 }
 
@@ -542,17 +548,29 @@ func (s *Server) forwardMarketData(msg Message) {
 func (s *Server) forwardKlinesResponse(msg Message) {
 	requestID, ok := msg["request_id"].(float64)
 	if !ok {
+		log.Printf("[MT5] Klines response missing request_id\n")
 		return
 	}
+
+	log.Printf("[MT5] Klines response received, request_id=%d\n", int(requestID))
 
 	s.mu.RLock()
 	client, ok := s.clientConns[int(requestID)]
 	s.mu.RUnlock()
 
-	if ok && client.Authenticated {
-		delete(msg, "request_id")
-		s.sendTo(client.WS, msg)
+	if !ok {
+		log.Printf("[MT5] Client not found for request_id=%d (client may have disconnected)\n", int(requestID))
+		return
 	}
+
+	if !client.Authenticated {
+		log.Printf("[MT5] Client %d not authenticated, dropping klines response\n", int(requestID))
+		return
+	}
+
+	delete(msg, "request_id")
+	log.Printf("[MT5] Forwarding klines response to client %d\n", int(requestID))
+	s.sendTo(client.WS, msg)
 }
 
 // sendTo sends a JSON message to a WebSocket
