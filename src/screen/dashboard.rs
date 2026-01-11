@@ -21,7 +21,7 @@ use exchange::{
     Kline, PushFrequency, StreamPairKind, TickMultiplier, TickerInfo, Timeframe, Trade,
     adapter::{
         self, AdapterError, Exchange, PersistStreamKind, ResolvedStream, StreamConfig, StreamKind,
-        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, okex,
+        StreamTicksize, UniqueStreams, binance, bybit, hyperliquid, metatrader5, okex,
     },
     depth::Depth,
     fetcher::{FetchRange, FetchedData},
@@ -1373,9 +1373,20 @@ pub fn depth_subscription(
             Subscription::run_with(config, builder)
         }
         Exchange::MetaTrader5 => {
-            // MT5 uses custom connection via Mt5Config, not standard subscription
-            // Return empty subscription - MT5 connections are managed separately
-            Subscription::none()
+            // Use global MT5 config for subscription
+            if let Some(mt5_config) = metatrader5::get_global_config() {
+                let builder = move |cfg: &StreamConfig<TickerInfo>| {
+                    metatrader5::connect_market_stream(
+                        mt5_config.clone(),
+                        cfg.id,
+                        cfg.push_freq,
+                    )
+                };
+                Subscription::run_with(config, builder)
+            } else {
+                log::warn!("MT5 depth subscription requested but no config set");
+                Subscription::none()
+            }
         }
     }
 }
@@ -1411,7 +1422,10 @@ pub fn kline_subscription(
             Subscription::run_with(config, builder)
         }
         Exchange::MetaTrader5 => {
-            // MT5 uses custom connection via Mt5Config, not standard subscription
+            // MT5 uses global config for kline subscription
+            // The connect_market_stream handles all data types including klines
+            // So we return none here to avoid duplicate connections
+            // Kline updates come through the market stream
             Subscription::none()
         }
     }
