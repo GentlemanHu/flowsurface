@@ -33,8 +33,8 @@ use iced_futures::{
     stream,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
 use std::sync::RwLock;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 // ============================================================================
 // Global MT5 Configuration Storage
@@ -448,7 +448,11 @@ pub async fn fetch_klines(
         log::debug!("MT5 klines response: {}", &text[..text.len().min(500)]);
         match serde_json::from_str::<KlinesResponse>(&text) {
             Ok(resp) => {
-                log::info!("MT5 received {} klines for {}", resp.data.len(), ticker_info.ticker);
+                log::info!(
+                    "MT5 received {} klines for {}",
+                    resp.data.len(),
+                    ticker_info.ticker
+                );
                 for k in resp.data {
                     let buy_volume = (k.volume / 2.0) as f32;
                     let sell_volume = (k.volume / 2.0) as f32;
@@ -465,7 +469,11 @@ pub async fn fetch_klines(
                 }
             }
             Err(e) => {
-                log::error!("MT5 klines parse error: {} - response: {}", e, &text[..text.len().min(200)]);
+                log::error!(
+                    "MT5 klines parse error: {} - response: {}",
+                    e,
+                    &text[..text.len().min(200)]
+                );
             }
         }
     }
