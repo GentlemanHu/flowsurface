@@ -663,7 +663,10 @@ pub async fn fetch_ticker_info(
         Exchange::MetaTrader5 => {
             // Try to get global MT5 config
             if let Some(config) = metatrader5::get_global_config() {
-                log::info!("MT5 fetch_ticker_info using global config: {}", config.server_addr);
+                log::info!(
+                    "MT5 fetch_ticker_info using global config: {}",
+                    config.server_addr
+                );
                 metatrader5::fetch_ticksize(&config).await
             } else {
                 log::warn!("MT5 ticker info requested but no MT5 config is set");
@@ -726,7 +729,10 @@ pub async fn fetch_klines(
             );
             // Try to get global MT5 config
             if let Some(config) = metatrader5::get_global_config() {
-                log::info!("MT5 config found, fetching klines from {}", config.server_addr);
+                log::info!(
+                    "MT5 config found, fetching klines from {}",
+                    config.server_addr
+                );
                 match metatrader5::fetch_klines(&config, ticker_info, timeframe, range).await {
                     Ok(klines) => {
                         log::info!("MT5 fetch_klines success: {} klines", klines.len());
