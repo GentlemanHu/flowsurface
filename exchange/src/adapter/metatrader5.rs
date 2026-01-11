@@ -486,25 +486,14 @@ pub async fn fetch_klines(
 
 /// Connect to MT5 market data stream using global config (for Subscription compatibility)
 /// This function doesn't take config as parameter, instead fetches from global storage.
-/// Returns empty stream if no global config is set.
+/// IMPORTANT: Caller must ensure global config exists before calling (use get_global_config().is_some())
 pub fn connect_market_stream_global(
     ticker_info: TickerInfo,
     push_freq: PushFrequency,
-) -> Box<dyn Stream<Item = Event> + Send> {
-    if let Some(config) = get_global_config() {
-        Box::new(connect_market_stream_inner(config, ticker_info, push_freq))
-    } else {
-        log::error!("MT5 connect_market_stream_global called but no config set");
-        // Return an empty stream that just sends disconnected event
-        Box::new(stream::channel(1, move |mut output: mpsc::Sender<Event>| async move {
-            let _ = output
-                .send(Event::Disconnected(
-                    super::Exchange::MetaTrader5,
-                    "MT5 not configured".to_string(),
-                ))
-                .await;
-        }))
-    }
+) -> impl Stream<Item = Event> {
+    // Caller guarantees config exists, so unwrap is safe here
+    let config = get_global_config().expect("MT5 config must be set before calling this function");
+    connect_market_stream_inner(config, ticker_info, push_freq)
 }
 
 /// Connect to MT5 market data stream

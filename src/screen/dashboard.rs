@@ -1373,12 +1373,16 @@ pub fn depth_subscription(
             Subscription::run_with(config, builder)
         }
         Exchange::MetaTrader5 => {
-            // Use global MT5 config via connect_market_stream_global
-            // This function fetches config internally, avoiding closure capture issues
-            let builder = |cfg: &StreamConfig<TickerInfo>| {
-                metatrader5::connect_market_stream_global(cfg.id, cfg.push_freq)
-            };
-            Subscription::run_with(config, builder)
+            // Check if MT5 config exists before creating subscription
+            if metatrader5::get_global_config().is_some() {
+                let builder = |cfg: &StreamConfig<TickerInfo>| {
+                    metatrader5::connect_market_stream_global(cfg.id, cfg.push_freq)
+                };
+                Subscription::run_with(config, builder)
+            } else {
+                log::warn!("MT5 depth subscription requested but no config set");
+                Subscription::none()
+            }
         }
     }
 }
