@@ -597,7 +597,11 @@ impl TickersTable {
                 let new_row = TickerRowData {
                     exchange,
                     ticker,
-                    stats: TickerStats::default(),
+                    stats: TickerStats {
+                        mark_price: 0.0,
+                        daily_price_chg: 0.0,
+                        daily_volume: 0.0,
+                    },
                     previous_stats: None,
                     is_favorited: self.favorited_tickers.contains(&ticker),
                 };
